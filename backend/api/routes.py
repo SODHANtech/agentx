@@ -92,7 +92,7 @@ def register(payload: UserRegisterSchema, db: Session = Depends(get_db)):
         name=payload.name,
         email=payload.email,
         password_hash=hash_password(payload.password),
-        role=payload.role,
+        role="Student",
         cgpa=payload.cgpa,
         backlogs=payload.backlogs
     )
@@ -269,9 +269,11 @@ def ask(
 
 
 @router.get("/dashboard")
-def dashboard_data(current_user: models.User = Depends(get_current_user)):
-    # Dynamically inject student context from JWT instead of hardcoding satya
-    dashboard_res = dashboard.get_dashboard()
+def dashboard_data(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    dashboard_res = dashboard.get_dashboard(student_id=current_user.id, db=db)
     dashboard_res["student"] = {
         "name": current_user.name,
         "cgpa": current_user.cgpa,
@@ -281,10 +283,12 @@ def dashboard_data(current_user: models.User = Depends(get_current_user)):
 
 
 @router.get("/notifications")
-def notifications(current_user: models.User = Depends(get_current_user)):
-    base_notifications = dashboard.get_dashboard().get("notifications", [])
-    # Dynamic student ID in query
-    event_reminders = events_agent.get_event_reminders(f"S_{current_user.id}")
+def notifications(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    base_notifications = dashboard.get_dashboard(student_id=current_user.id, db=db).get("notifications", [])
+    event_reminders = events_agent.get_event_reminders(current_user.id, db=db)
     return base_notifications + event_reminders
 
 
@@ -303,7 +307,8 @@ def get_classes(day: str, current_user: models.User = Depends(get_current_user))
 @router.post("/events/register")
 def register_event(
     payload: EventRegisterSchema, 
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     event_name = payload.event
     if not event_name:
@@ -311,13 +316,14 @@ def register_event(
             status_code=400,
             detail="Event name is required."
         )
-    return events_agent.register_event(event_name)
+    return events_agent.register_event(event_name, student_id=current_user.id, db=db)
 
 
 @router.post("/events/cancel")
 def cancel_event(
     payload: EventCancelSchema, 
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     event_name = payload.event
     if not event_name:
@@ -325,12 +331,15 @@ def cancel_event(
             status_code=400,
             detail="Event name is required."
         )
-    return events_agent.cancel_registration(event_name)
+    return events_agent.cancel_registration(event_name, student_id=current_user.id, db=db)
 
 
 @router.get("/events/registrations")
-def registrations(current_user: models.User = Depends(get_current_user)):
-    return events_agent.get_registered_events()
+def registrations(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return events_agent.get_registered_events(student_id=current_user.id, db=db)
 
 
 # -------------------- Calendar Export --------------------
@@ -410,21 +419,24 @@ def search_services(query: str, current_user: models.User = Depends(get_current_
 @router.post("/student-services/grievance")
 def post_grievance(
     payload: GrievanceSchema, 
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     category = payload.category
     description = payload.description
     if not description:
         raise HTTPException(status_code=400, detail="Description is required.")
-    # Link grievance to real student ID
-    return student_services_agent.file_grievance(f"STUDENT_{current_user.id}", category, description)
+    return student_services_agent.file_grievance(current_user.id, category, description, db=db)
 
 
 # -------------------- Communication (Admin Protected) --------------------
 
 @router.get("/communications")
-def get_communications(current_user: models.User = Depends(get_current_user)):
-    return communication_agent.get_announcements()
+def get_communications(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return communication_agent.get_announcements(db=db)
 
 
 @router.post("/communications/draft-email")
@@ -455,7 +467,8 @@ def send_notification(
 @router.post("/communications/announcement")
 def post_announcement(
     payload: CreateAnnouncementSchema, 
-    admin_user: models.User = Depends(require_admin)
+    admin_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
 ):
     # RBAC restriction: Only Admin can post announcements
     title = payload.title
@@ -463,19 +476,20 @@ def post_announcement(
     category = payload.category
     if not title or not content:
         raise HTTPException(status_code=400, detail="Title and Content are required.")
-    return communication_agent.create_announcement(title, content, category)
+    return communication_agent.create_announcement(title, content, category, author_id=admin_user.id, db=db)
 
 
 @router.post("/communications/schedule-appointment")
 def schedule_appointment(
     payload: ScheduleAppointmentSchema, 
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     officer = payload.officer
     date = payload.date
     time_slot = payload.time_slot
     reason = payload.reason
-    return communication_agent.schedule_appointment(f"STUDENT_{current_user.id}", officer, date, time_slot, reason)
+    return communication_agent.schedule_appointment(current_user.id, officer, date, time_slot, reason, db=db)
 
 
 # -------------------- Resume --------------------
@@ -519,7 +533,7 @@ def trigger_clustering(
 
 @router.get("/admin/clusters")
 def get_clusters(
-    current_user: models.User = Depends(get_current_user), 
+    admin_user: models.User = Depends(require_admin), 
     db: Session = Depends(get_db)
 ):
     clusters = db.query(models.ComplaintCluster).all()
