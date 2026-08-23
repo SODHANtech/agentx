@@ -1,13 +1,12 @@
 import json
+import re
 from pathlib import Path
 from datetime import datetime
+from sqlalchemy.orm import Session
+from backend.database.session import SessionLocal
+from backend.database import models
 
 EVENTS_PATH = Path(__file__).resolve().parent.parent / "data" / "events.json"
-REGISTRATION_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "data"
-    / "event_registrations.json"
-)
 
 
 class EventsAgent:
@@ -20,32 +19,20 @@ class EventsAgent:
         with open(EVENTS_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def get_registrations(self):
-        try:
-            with open(REGISTRATION_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except FileNotFoundError:
-            return []
-
-    def save_registrations(self, registrations):
-        with open(REGISTRATION_PATH, "w", encoding="utf-8") as f:
-            json.dump(registrations, f, indent=4)
-
     # =============================
     # Main Handler
     # =============================
 
-    def handle(self, query: str):
-
+    def handle(self, query: str, student_id: int = 2, db: Session = None):
         query = query.lower().strip()
 
         # Register
         if "register" in query:
-            return self.register_event(query)
+            return self.register_event(query, student_id, db)
 
         # Cancel
         if "cancel" in query:
-            return self.cancel_registration(query)
+            return self.cancel_registration(query, student_id, db)
 
         # My Registered Events
         if (
@@ -53,7 +40,7 @@ class EventsAgent:
             or "registered events" in query
             or "my registrations" in query
         ):
-            return self.get_registered_events()
+            return self.get_registered_events(student_id, db)
 
         # Show All Events
         if any(word in query for word in [
@@ -98,36 +85,46 @@ class EventsAgent:
     # Registered Events
     # =============================
 
-    def get_registered_events(self, student_id: str = "S001"):
-        registrations = self.get_registrations()
-        my_events = [
-            reg
-            for reg in registrations
-            if reg.get("student_id") == student_id
-        ]
-        return {
-            "registered_events": my_events
-        }
+    def get_registered_events(self, student_id: int = 2, db: Session = None):
+        local_session = False
+        if db is None:
+            db = SessionLocal()
+            local_session = True
+        try:
+            registrations = db.query(models.EventRegistration).filter(
+                models.EventRegistration.student_id == student_id,
+                models.EventRegistration.registered == True
+            ).all()
+            my_events = []
+            for reg in registrations:
+                my_events.append({
+                    "student_id": f"STUDENT_{reg.student_id}",
+                    "event": reg.event_title,
+                    "registered": reg.registered,
+                    "date": reg.date,
+                    "venue": reg.venue
+                })
+            return {
+                "registered_events": my_events
+            }
+        finally:
+            if local_session:
+                db.close()
 
     # =============================
     # Search by Month
     # =============================
 
     def search_by_month(self, query):
-
         months = [
             "january", "february", "march",
             "april", "may", "june",
             "july", "august", "september",
             "october", "november", "december"
         ]
-
         events = self.get_events()
-
         for month in months:
-
             if month in query:
-
                 return [
                     event
                     for event in events
@@ -136,7 +133,6 @@ class EventsAgent:
                         "%Y-%m-%d"
                     ).strftime("%B").lower() == month
                 ]
-
         return []
 
     # =============================
@@ -144,9 +140,7 @@ class EventsAgent:
     # =============================
 
     def search_by_date(self, query):
-
         events = self.get_events()
-
         return [
             event
             for event in events
@@ -158,9 +152,7 @@ class EventsAgent:
     # =============================
 
     def search_by_venue(self, query):
-
         events = self.get_events()
-
         return [
             event
             for event in events
@@ -172,19 +164,14 @@ class EventsAgent:
     # =============================
 
     def search_event(self, query):
-
         events = self.get_events()
-
         keywords = [
             word
             for word in query.lower().split()
             if len(word) > 2
         ]
-
         results = []
-
         for event in events:
-
             searchable = (
                 event.get("title", "")
                 + " "
@@ -196,7 +183,6 @@ class EventsAgent:
             ).lower()
 
             score = 0
-
             for keyword in keywords:
                 if keyword in searchable:
                     score += 1
@@ -208,7 +194,6 @@ class EventsAgent:
             key=lambda x: x[0],
             reverse=True
         )
-
         return [
             item[1]
             for item in results
@@ -218,80 +203,92 @@ class EventsAgent:
     # Cancel Registration
     # =============================
 
-    def cancel_registration(self, query):
+    def cancel_registration(self, query: str, student_id: int = 2, db: Session = None):
+        local_session = False
+        if db is None:
+            db = SessionLocal()
+            local_session = True
+        try:
+            # Look for active registrations
+            regs = db.query(models.EventRegistration).filter(
+                models.EventRegistration.student_id == student_id,
+                models.EventRegistration.registered == True
+            ).all()
 
-        registrations = self.get_registrations()
+            for reg in regs:
+                if reg.event_title.lower() in query.lower() or query.lower() in reg.event_title.lower():
+                    reg.registered = False
+                    db.commit()
+                    return {
+                        "success": True,
+                        "message": "Registration cancelled successfully."
+                    }
 
-        updated = []
-        removed = False
-
-        for reg in registrations:
-
-            if (
-                reg.get("student_id") == "S001"
-                and reg.get("event", "").lower() in query.lower()
-            ):
-                removed = True
-                continue
-
-            updated.append(reg)
-
-        self.save_registrations(updated)
-
-        if removed:
             return {
-                "success": True,
-                "message": "Registration cancelled successfully."
+                "success": False,
+                "message": "No registration found."
             }
-
-        return {
-            "success": False,
-            "message": "No registration found."
-        }
+        finally:
+            if local_session:
+                db.close()
 
     # =============================
     # Register Event
     # =============================
 
-    def register_event(self, query):
+    def register_event(self, query: str, student_id: int = 2, db: Session = None):
+        local_session = False
+        if db is None:
+            db = SessionLocal()
+            local_session = True
+        try:
+            events = self.get_events()
+            for event in events:
+                if event["title"].lower() in query.lower() or query.lower() in event["title"].lower():
+                    # Check if already registered
+                    existing = db.query(models.EventRegistration).filter(
+                        models.EventRegistration.student_id == student_id,
+                        models.EventRegistration.event_title == event["title"]
+                    ).first()
 
-        events = self.get_events()
-        registrations = self.get_registrations()
+                    if existing:
+                        if existing.registered:
+                            return {
+                                "success": False,
+                                "message": f"You are already registered for {event['title']}."
+                            }
+                        else:
+                            # Re-register
+                            existing.registered = True
+                            db.commit()
+                            return {
+                                "success": True,
+                                "message": f"Successfully registered for {event['title']}."
+                            }
 
-        for event in events:
+                    # Create new registration record
+                    new_reg = models.EventRegistration(
+                        student_id=student_id,
+                        event_title=event["title"],
+                        registered=True,
+                        date=event.get("date", ""),
+                        venue=event.get("venue", "")
+                    )
+                    db.add(new_reg)
+                    db.commit()
 
-            if event["title"].lower() in query.lower() or query.lower() in event["title"].lower():
+                    return {
+                        "success": True,
+                        "message": f"Successfully registered for {event['title']}."
+                    }
 
-                for reg in registrations:
-
-                    if (
-                        reg.get("student_id") == "S001"
-                        and reg.get("event") == event["title"]
-                    ):
-                        return {
-                            "success": False,
-                            "message": f"You are already registered for {event['title']}."
-                        }
-
-                registrations.append({
-                    "student_id": "S001",
-                    "event": event["title"],
-                    "registered": True,
-                    "date": event.get("date", ""),
-                    "venue": event.get("venue", "")
-                })
-
-                self.save_registrations(registrations)
-
-                return {
-                    "success": True,
-                    "message": f"Successfully registered for {event['title']}."
-                }
-
-        return {
-            "success": False,
-            "message": "Event not found."
-        }
+            return {
+                "success": False,
+                "message": "Event not found."
+            }
+        finally:
+            if local_session:
+                db.close()
 
     # =============================
     # Calendar Export (.ics)
@@ -326,19 +323,40 @@ class EventsAgent:
     # Event Reminders
     # =============================
 
-    def get_event_reminders(self, student_id: str = "S001"):
-        registrations = self.get_registrations()
-        my_events = [r["event"] for r in registrations if r.get("student_id") == student_id]
-        events = self.get_events()
+    def get_event_reminders(self, student_id, db: Session = None):
+        parsed_student_id = 2
+        if isinstance(student_id, int):
+            parsed_student_id = student_id
+        elif isinstance(student_id, str):
+            match = re.search(r'\d+', student_id)
+            if match:
+                parsed_student_id = int(match.group())
+                if parsed_student_id == 1:
+                    parsed_student_id = 2
 
-        reminders = []
-        for evt in events:
-            if evt["title"] in my_events:
-                reminders.append({
-                    "id": f"rem_{evt['title']}",
-                    "title": f"Upcoming Event: {evt['title']}",
-                    "message": f"You are registered for {evt['title']} on {evt['date']} at {evt['venue']}.",
-                    "type": "event_reminder",
-                    "date": evt.get("date", "")
-                })
-        return reminders
+        local_session = False
+        if db is None:
+            db = SessionLocal()
+            local_session = True
+        try:
+            registrations = db.query(models.EventRegistration).filter(
+                models.EventRegistration.student_id == parsed_student_id,
+                models.EventRegistration.registered == True
+            ).all()
+            my_events = [r.event_title for r in registrations]
+            events = self.get_events()
+
+            reminders = []
+            for evt in events:
+                if evt["title"] in my_events:
+                    reminders.append({
+                        "id": f"rem_{evt['title']}",
+                        "title": f"Upcoming Event: {evt['title']}",
+                        "message": f"You are registered for {evt['title']} on {evt['date']} at {evt['venue']}.",
+                        "type": "event_reminder",
+                        "date": evt.get("date", "")
+                    })
+            return reminders
+        finally:
+            if local_session:
+                db.close()
