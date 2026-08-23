@@ -1,0 +1,17 @@
+[
+    {
+        "company": "Google",
+        "cgpa": 8.0,
+        "backlogs": 0
+    },
+    {
+        "company": "Microsoft",
+        "cgpa": 7.5,
+        "backlogs": 0
+    },
+    {
+        "company": "Amazon",
+        "cgpa": 7.0,
+        "backlogs": 1
+    }
+]

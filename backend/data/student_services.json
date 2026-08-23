@@ -1,0 +1,50 @@
+[
+    {
+        "service": "Bonafide Certificate",
+        "description": "Students can apply for a bonafide certificate through the administration office or the student portal.",
+        "office": "Administration Office",
+        "timing": "9:00 AM - 4:00 PM"
+    },
+    {
+        "service": "ID Card Replacement",
+        "description": "Submit a written request along with a passport-size photo and replacement fee.",
+        "office": "Student Affairs",
+        "timing": "10:00 AM - 3:00 PM"
+    },
+    {
+        "service": "Library",
+        "description": "The library provides books, journals, and digital resources for all students.",
+        "office": "Central Library",
+        "timing": "8:00 AM - 8:00 PM"
+    },
+    {
+        "service": "Hostel",
+        "description": "Hostel applications are accepted at the beginning of every semester.",
+        "office": "Hostel Office",
+        "timing": "9:00 AM - 5:00 PM"
+    },
+    {
+        "service": "Bus Transport",
+        "description": "Students can register for bus transportation through the transport office.",
+        "office": "Transport Office",
+        "timing": "9:00 AM - 4:00 PM"
+    },
+    {
+        "service": "Scholarships",
+        "description": "Merit and government scholarships can be applied for through the scholarship portal.",
+        "office": "Scholarship Cell",
+        "timing": "10:00 AM - 4:00 PM"
+    },
+    {
+        "service": "Fee Payment",
+        "description": "Fees can be paid online through the student portal or at the accounts office.",
+        "office": "Accounts Office",
+        "timing": "9:00 AM - 4:00 PM"
+    },
+    {
+        "service": "Transcript",
+        "description": "Students can request official transcripts by submitting an application form.",
+        "office": "Examination Branch",
+        "timing": "9:30 AM - 4:00 PM"
+    }
+]

@@ -1,0 +1,17 @@
+[
+    {
+        "day": "Monday",
+        "subject": "Artificial Intelligence",
+        "time": "10:00 AM"
+    },
+    {
+        "day": "Monday",
+        "subject": "DBMS",
+        "time": "2:00 PM"
+    },
+    {
+        "day": "Tuesday",
+        "subject": "Operating Systems",
+        "time": "11:00 AM"
+    }
+]

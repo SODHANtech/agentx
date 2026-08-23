@@ -1,0 +1,32 @@
+[
+    {
+        "department": "CSE",
+        "title": "Mid Semester Examination",
+        "message": "Mid semester examinations will begin on 20 August 2026.",
+        "date": "2026-08-10"
+    },
+    {
+        "department": "Placement Cell",
+        "title": "Google Placement Drive",
+        "message": "Google registrations close on 18 August 2026.",
+        "date": "2026-08-12"
+    },
+    {
+        "department": "Placement Cell",
+        "title": "Microsoft Internship",
+        "message": "Microsoft internship applications are now open.",
+        "date": "2026-08-14"
+    },
+    {
+        "department": "Administration",
+        "title": "College Holiday",
+        "message": "College will remain closed on Independence Day.",
+        "date": "2026-08-15"
+    },
+    {
+        "department": "Library",
+        "title": "Library Timing",
+        "message": "Library will remain open until 8:00 PM during examinations.",
+        "date": "2026-08-16"
+    }
+]

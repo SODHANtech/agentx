@@ -1,0 +1,26 @@
+[
+    {
+        "title": "AI Workshop",
+        "date": "2026-08-10",
+        "time": "10:00 AM",
+        "venue": "Seminar Hall"
+    },
+    {
+        "title": "Hackathon",
+        "date": "2026-08-15",
+        "time": "9:00 AM",
+        "venue": "Main Auditorium"
+    },
+    {
+        "title": "Placement Drive - Google",
+        "date": "2026-08-20",
+        "time": "11:00 AM",
+        "venue": "Placement Cell"
+    },
+    {
+        "title": "Tech Fest",
+        "date": "2026-08-25",
+        "time": "10:00 AM",
+        "venue": "College Ground"
+    }
+]
