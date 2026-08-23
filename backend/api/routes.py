@@ -500,12 +500,27 @@ async def analyze_resume(
     file: UploadFile = File(...), 
     current_user: models.User = Depends(get_current_user)
 ):
+    # Validate MIME type and file extension
+    if file.content_type != "application/pdf" or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are allowed."
+        )
+
+    # Read content to check file size (5MB limit)
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds the maximum limit of 5MB."
+        )
+
     upload_dir = "backend/data/uploads"
     os.makedirs(upload_dir, exist_ok=True)
     file_path = os.path.join(upload_dir, file.filename)
 
     with open(file_path, "wb") as f:
-        f.write(await file.read())
+        f.write(content)
 
     return resume_agent.analyze_resume(file_path)
 

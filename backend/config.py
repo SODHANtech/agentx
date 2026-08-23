@@ -1,8 +1,12 @@
 import os
 from typing import List, Union
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    # Environment
+    ENV: str = "development"
+
     # API credentials
     GROQ_API_KEY: str
 
@@ -33,5 +37,11 @@ class Settings(BaseSettings):
         if isinstance(self.ALLOWED_ORIGINS, str):
             return [orig.strip() for orig in self.ALLOWED_ORIGINS.split(",") if orig.strip()]
         return self.ALLOWED_ORIGINS
+
+    @model_validator(mode="after")
+    def validate_security(self) -> 'Settings':
+        if self.ENV == "production" and self.JWT_SECRET_KEY == "super_secret_campus_os_jwt_key_2026_hackathon":
+            raise ValueError("Insecure JWT_SECRET_KEY cannot be used in a production environment.")
+        return self
 
 settings = Settings()
