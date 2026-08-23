@@ -244,6 +244,17 @@ def run_tests():
     assert email_chat_res.json()["status"] == "success"
     print("  [PASS] LangGraph Communications Agent email drafting query successful")
 
+    # ---------------------------------------------
+    # 7. DASHBOARD TESTS
+    # ---------------------------------------------
+    print("\n7. Running Dashboard Endpoint Tests...")
+    dash_res = client.get("/dashboard", headers=student_headers)
+    assert dash_res.status_code == 200, f"Dashboard retrieval failed: {dash_res.text}"
+    dash_data = dash_res.json()
+    assert "student" in dash_data, "Student object missing in dashboard response"
+    assert dash_data["student"]["name"] == "Satya", f"Expected Satya user name, got: {dash_data['student']['name']}"
+    print("  [PASS] Dashboard endpoint returns dynamic student profile successfully")
+
     print("\n=== ALL COMPONENT TESTS COMPLETED SUCCESSFULLY ===")
 
 if __name__ == "__main__":
