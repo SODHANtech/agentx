@@ -18,29 +18,76 @@ export default function Communications() {
   const [annForm, setAnnForm] = useState({ title: "", content: "", category: "General" });
   const [aptForm, setAptForm] = useState({ officer: "Academic Advisor", date: "", timeSlot: "10:00 AM", reason: "" });
 
+  const getRoleFromToken = () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return null;
+    try {
+      const payloadBase64 = token.split(".")[1];
+      const decodedPayload = JSON.parse(atob(payloadBase64.replace(/-/g, "+").replace(/_/g, "/")));
+      return decodedPayload.role;
+    } catch (e) {
+      console.error("Error parsing token:", e);
+      return null;
+    }
+  };
+
+  const role = getRoleFromToken();
+
   async function handleDraftEmail(e) {
     e.preventDefault();
-    const res = await draftEmail(emailForm.recipient, emailForm.subject, emailForm.purpose);
-    setOutput(res.body);
+    try {
+      const res = await draftEmail(emailForm.recipient, emailForm.subject, emailForm.purpose);
+      setOutput(res.body);
+    } catch (err) {
+      console.error("Draft email failed:", err);
+      alert(err.response?.data?.detail || "Failed to generate draft email.");
+    }
   }
 
   async function handleSendNotif(e) {
     e.preventDefault();
-    const res = await sendNotification(notifForm.title, notifForm.message, notifForm.audience);
-    alert(res.message);
+    try {
+      const res = await sendNotification(notifForm.title, notifForm.message, notifForm.audience);
+      alert(res.message || "Notification sent successfully!");
+    } catch (err) {
+      console.error("Send notification failed:", err);
+      alert(err.response?.data?.detail || "Failed to broadcast notification.");
+    }
   }
 
   async function handleCreateAnn(e) {
     e.preventDefault();
-    const res = await createAnnouncement(annForm.title, annForm.content, annForm.category);
-    alert(res.message);
+    try {
+      const res = await createAnnouncement(annForm.title, annForm.content, annForm.category);
+      alert(res.message || "Announcement published successfully!");
+    } catch (err) {
+      console.error("Create announcement failed:", err);
+      alert(err.response?.data?.detail || "Failed to publish announcement.");
+    }
   }
 
   async function handleBookApt(e) {
     e.preventDefault();
-    const res = await bookAppointment(aptForm.officer, aptForm.date, aptForm.timeSlot, aptForm.reason);
-    alert(res.message);
+    try {
+      const res = await bookAppointment(aptForm.officer, aptForm.date, aptForm.timeSlot, aptForm.reason);
+      alert(res.message || "Appointment booked successfully!");
+    } catch (err) {
+      console.error("Book appointment failed:", err);
+      alert(err.response?.data?.detail || "Failed to confirm appointment.");
+    }
   }
+
+  const tabs = [
+    { key: "draft", label: "Draft Email" },
+    { key: "notify", label: "Send Notification" },
+    { key: "announcement", label: "Create Announcement" },
+    { key: "appointment", label: "Book Appointment" },
+  ].filter((tab) => {
+    if (role === "Student" && (tab.key === "notify" || tab.key === "announcement")) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <div className="flex h-screen bg-slate-950 text-white">
@@ -53,12 +100,7 @@ export default function Communications() {
 
           {/* Navigation Tabs */}
           <div className="flex gap-4 mb-8 border-b border-slate-800 pb-4">
-            {[
-              { key: "draft", label: "Draft Email" },
-              { key: "notify", label: "Send Notification" },
-              { key: "announcement", label: "Create Announcement" },
-              { key: "appointment", label: "Book Appointment" },
-            ].map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => { setActiveTab(tab.key); setOutput(null); }}
