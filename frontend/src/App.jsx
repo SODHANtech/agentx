@@ -6,6 +6,7 @@ import Events from "./pages/Events";
 import Notifications from "./pages/Notifications";
 import StudentServices from "./pages/StudentServices";
 import Communications from "./pages/Communications";
+import AdminRadar from "./pages/AdminRadar";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -51,6 +52,14 @@ function App() {
           element={
             <ProtectedRoute>
               <Communications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin-radar"
+          element={
+            <ProtectedRoute requiredRole="Admin">
+              <AdminRadar />
             </ProtectedRoute>
           }
         />

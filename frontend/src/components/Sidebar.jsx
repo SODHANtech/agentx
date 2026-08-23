@@ -5,7 +5,8 @@ import {
   Bell,
   Building2,
   MessageSquare,
-  LogOut
+  LogOut,
+  Radio
 } from "lucide-react";
 import { logout } from "../services/api";
 
@@ -16,6 +17,21 @@ function Sidebar() {
     logout();
     navigate("/login");
   };
+
+  const getRoleFromToken = () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return null;
+    try {
+      const payloadBase64 = token.split(".")[1];
+      const decodedPayload = JSON.parse(atob(payloadBase64.replace(/-/g, "+").replace(/_/g, "/")));
+      return decodedPayload.role;
+    } catch (e) {
+      console.error("Error parsing token:", e);
+      return null;
+    }
+  };
+
+  const role = getRoleFromToken();
 
   return (
     <div className="w-64 h-screen bg-slate-900 border-r border-slate-800/80 text-white p-5 flex flex-col justify-between">
@@ -64,6 +80,16 @@ function Sidebar() {
             <MessageSquare size={20} />
             Communications
           </Link>
+
+          {role === "Admin" && (
+            <Link
+              to="/admin-radar"
+              className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
+            >
+              <Radio size={20} className="text-cyan-400" />
+              Complaint Radar
+            </Link>
+          )}
         </nav>
       </div>
 
