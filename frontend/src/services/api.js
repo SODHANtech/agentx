@@ -366,3 +366,13 @@ export const broadcastResolution = async (clusterId) => {
     throw error;
   }
 };
+
+export const getHealth = async () => {
+  try {
+    const response = await API.get("/health");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching health stats:", error);
+    throw error;
+  }
+};

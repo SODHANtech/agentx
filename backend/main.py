@@ -9,10 +9,13 @@ from backend.database import models
 # Automatically build schemas on startup
 Base.metadata.create_all(bind=engine)
 
+import time
+
 app = FastAPI(
     title="Smart Campus AI",
     version="1.0.0"
 )
+app.state.start_time = time.time()
 
 # CORS configuration
 app.add_middleware(

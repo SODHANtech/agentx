@@ -14,7 +14,7 @@ function ProtectedRoute({ children, requiredRole }) {
       const payloadBase64 = token.split(".")[1];
       const decodedPayload = JSON.parse(atob(payloadBase64.replace(/-/g, "+").replace(/_/g, "/")));
       if (decodedPayload.role !== requiredRole) {
-        // Forbidden: redirect to home dashboard
+        // Forbidden: redirect to home dashboard router
         return <Navigate to="/" replace />;
       }
     } catch (e) {

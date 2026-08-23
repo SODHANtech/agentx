@@ -49,38 +49,44 @@ function Sidebar() {
             Dashboard
           </Link>
 
-          <Link
-            to="/events"
-            className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
-          >
-            <Calendar size={20} />
-            Events
-          </Link>
+          {/* Student-only Links */}
+          {role === "Student" && (
+            <>
+              <Link
+                to="/events"
+                className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
+              >
+                <Calendar size={20} />
+                Events
+              </Link>
 
-          <Link
-            to="/notifications"
-            className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
-          >
-            <Bell size={20} />
-            Notifications
-          </Link>
+              <Link
+                to="/notifications"
+                className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
+              >
+                <Bell size={20} />
+                Notifications
+              </Link>
 
-          <Link
-            to="/student-services"
-            className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
-          >
-            <Building2 size={20} />
-            Student Services
-          </Link>
+              <Link
+                to="/student-services"
+                className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
+              >
+                <Building2 size={20} />
+                Student Services
+              </Link>
 
-          <Link
-            to="/communications"
-            className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
-          >
-            <MessageSquare size={20} />
-            Communications
-          </Link>
+              <Link
+                to="/communications"
+                className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
+              >
+                <MessageSquare size={20} />
+                Communications
+              </Link>
+            </>
+          )}
 
+          {/* Admin-only Links */}
           {role === "Admin" && (
             <Link
               to="/admin-radar"

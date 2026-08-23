@@ -1,5 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Response, Depends, Header
+from fastapi import APIRouter, UploadFile, File, HTTPException, Response, Depends, Header, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+import time
 from langchain_core.messages import HumanMessage
 import json
 import os
@@ -612,4 +614,41 @@ def broadcast_resolution(
         "status": "success",
         "message": f"Broadcasted resolution for cluster: {cluster.ai_title}",
         "announcement_id": new_announcement.id
+    }
+
+
+# ==========================================
+# System Health & Stats Endpoints
+# ==========================================
+
+@router.get("/health")
+def health_check(request: Request, db: Session = Depends(get_db)):
+    # Check database connection (SQLite)
+    db_status = "connected"
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        print(f"Database health check failed: {e}")
+        db_status = "disconnected"
+
+    # Compute server uptime
+    start_time = getattr(request.app.state, "start_time", time.time())
+    uptime = int(time.time() - start_time)
+
+    # Count actual users in the SQLite database
+    try:
+        total_users = db.query(models.User).count()
+        students = db.query(models.User).filter(models.User.role == "Student").count()
+        admins = db.query(models.User).filter(models.User.role == "Admin").count()
+    except Exception as e:
+        print(f"Error querying user counts: {e}")
+        total_users, students, admins = 0, 0, 0
+
+    return {
+        "backend": "online",
+        "database": db_status,
+        "uptime": uptime,
+        "totalUsers": total_users,
+        "students": students,
+        "admins": admins
     }

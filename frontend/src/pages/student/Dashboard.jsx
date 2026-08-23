@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import Sidebar from "../components/Sidebar";
-import Navbar from "../components/Navbar";
-import ChatBox from "../components/ChatBox";
-import StatsCards from "../components/StatsCards";
-import AgentTimeline from "../components/AgentTimeline";
-import { useWorkflow } from "../hooks/useWorkflow";
+import Sidebar from "../../components/Sidebar";
+import Navbar from "../../components/Navbar";
+import ChatBox from "../../components/ChatBox";
+import StatsCards from "../../components/StatsCards";
+import AgentTimeline from "../../components/AgentTimeline";
+import { useWorkflow } from "../../hooks/useWorkflow";
 
 function Dashboard() {
   const { agents, runWorkflow, resetAgents } = useWorkflow();

@@ -255,6 +255,21 @@ def run_tests():
     assert dash_data["student"]["name"] == "Satya", f"Expected Satya user name, got: {dash_data['student']['name']}"
     print("  [PASS] Dashboard endpoint returns dynamic student profile successfully")
 
+    # ---------------------------------------------
+    # 8. SYSTEM HEALTH TESTS
+    # ---------------------------------------------
+    print("\n8. Running System Health & Stats Tests...")
+    health_res = client.get("/health")
+    assert health_res.status_code == 200, f"Health endpoint failed: {health_res.text}"
+    health_data = health_res.json()
+    assert health_data["backend"] == "online"
+    assert health_data["database"] == "connected"
+    assert "uptime" in health_data
+    assert "totalUsers" in health_data
+    assert "students" in health_data
+    assert "admins" in health_data
+    print("  [PASS] Health endpoint checks completed successfully")
+
     print("\n=== ALL COMPONENT TESTS COMPLETED SUCCESSFULLY ===")
 
 if __name__ == "__main__":
