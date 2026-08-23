@@ -522,7 +522,13 @@ async def analyze_resume(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    return resume_agent.analyze_resume(file_path)
+    try:
+        return resume_agent.analyze_resume(file_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to parse or analyze PDF file: {str(e)}"
+        )
 
 
 # -------------------- Admin AI Complaint Intelligence --------------------

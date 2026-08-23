@@ -121,10 +121,14 @@ def deterministic_route(query: str) -> dict:
 
 def route(query: str) -> dict:
     # LEVEL 1: Deterministic routing check
-    det_res = deterministic_route(query)
+    current_question = query
+    if "Current User Question:" in query:
+        current_question = query.split("Current User Question:")[-1].strip()
+
+    det_res = deterministic_route(current_question)
     if det_res:
         print("========== LEVEL 1: DETERMINISTIC ROUTER ==========")
-        print("Query :", query.strip())
+        print("Query :", current_question.strip())
         print("Agents:", det_res["agents"])
         print("Params:", det_res["parameters"])
         print("====================================================")
