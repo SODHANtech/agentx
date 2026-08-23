@@ -2,7 +2,7 @@ import json
 from langchain_core.messages import AIMessage
 
 from backend.router import route
-from backend.database.session import SessionLocal
+from backend.database.session import SessionLocal, get_db
 from backend.database.models import User
 from backend.agents.academic_agent import AcademicAgent
 from backend.agents.placement_agent import PlacementAgent
@@ -11,6 +11,10 @@ from backend.agents.notification_agent import NotificationAgent
 from backend.agents.events_agent import EventsAgent
 from backend.agents.student_services_agent import StudentServicesAgent
 from backend.agents.quiz_agent import QuizAgent
+from backend.agents.resume_agent import ResumeAgent
+from backend.agents.communications_agent import CommunicationAgent
+from backend.llm import llm
+from backend.database import models
 
 academic = AcademicAgent()
 placement = PlacementAgent()
@@ -19,6 +23,8 @@ notification = NotificationAgent()
 events = EventsAgent()
 student_services = StudentServicesAgent()
 quiz_agent = QuizAgent()
+resume_agent = ResumeAgent()
+communication = CommunicationAgent()
 
 def router_node(state):
     messages = state["messages"]
@@ -41,8 +47,6 @@ def router_node(state):
             user_profile = db.query(User).filter(User.id == student_id).first()
     except Exception as e:
         print(f"Error fetching user profile in router_node: {e}")
-    finally:
-        db.close()
 
     # Send history + current query to unified router
     router_query = f"""
@@ -180,7 +184,7 @@ Current User Question:
                 "status": "completed",
                 "detail": "Scheduling alert reminder trigger"
             })
-            final_answer["notification"] = notification.remind(query)
+            final_answer["notification"] = notification.remind(query, student_id=student_id, db=db)
 
         # ---------------- Events Agent ----------------
         elif agent == "EventsAgent":
@@ -201,6 +205,122 @@ Current User Question:
                 "detail": "Searching active campus services directory"
             })
             final_answer["student_services"] = student_services.search_services(query)
+
+        # ---------------- Resume Agent ----------------
+        elif agent == "ResumeAgent":
+            steps.append({
+                "id": "resume",
+                "name": "Resume Agent",
+                "status": "completed",
+                "detail": "Providing resume upload instructions."
+            })
+            final_answer["response"] = "Please upload a resume file directly via the attachment clip icon below to analyze it."
+
+        # ---------------- Communication Agent ----------------
+        elif agent == "CommunicationAgent":
+            steps.append({
+                "id": "communication",
+                "name": "Communication Agent",
+                "status": "completed",
+                "detail": "Handling communication query."
+            })
+            q_lower = query.lower()
+            if "email" in q_lower or "draft" in q_lower or "mail" in q_lower:
+                prompt = f"""
+You are the Communication Agent.
+The student wants to draft an email.
+User Query: {query}
+
+Extract:
+1. Recipient (name or department, default: "Registrar's Office")
+2. Subject (default: "Request for Information")
+3. Purpose (short summary of what the user wants to email about)
+
+Return ONLY a valid JSON object matching the following structure:
+{{
+    "recipient": "...",
+    "subject": "...",
+    "purpose": "..."
+}}
+"""
+                try:
+                    response = llm.invoke(prompt)
+                    text = response.content.strip()
+                    if text.startswith("```"):
+                        text = text.split("```")[1]
+                        if text.startswith("json"):
+                            text = text[4:]
+                    text = text.strip()
+                    data = json.loads(text)
+                except Exception:
+                    data = {
+                        "recipient": "Registrar's Office",
+                        "subject": "Request for Information",
+                        "purpose": query
+                    }
+                
+                draft = communication.draft_email(
+                    recipient=data.get("recipient", "Registrar's Office"),
+                    subject=data.get("subject", "Request for Information"),
+                    purpose=data.get("purpose", query)
+                )
+                final_answer["communication"] = {
+                    "message": f"Draft email generated successfully for {draft['recipient']}.",
+                    "email_draft": draft
+                }
+            elif "appointment" in q_lower or "schedule" in q_lower or "slot" in q_lower or "book" in q_lower:
+                prompt = f"""
+You are the Communication Agent.
+The student wants to schedule an appointment.
+User Query: {query}
+
+Extract:
+1. Officer (default: "Academic Advisor")
+2. Date (format YYYY-MM-DD, default: "2026-08-24")
+3. Time slot (default: "10:00 AM")
+4. Reason (default: "Academic Discussion")
+
+Return ONLY a valid JSON object matching the following structure:
+{{
+    "officer": "...",
+    "date": "...",
+    "time_slot": "...",
+    "reason": "..."
+}}
+"""
+                try:
+                    response = llm.invoke(prompt)
+                    text = response.content.strip()
+                    if text.startswith("```"):
+                        text = text.split("```")[1]
+                        if text.startswith("json"):
+                            text = text[4:]
+                    text = text.strip()
+                    data = json.loads(text)
+                except Exception:
+                    data = {
+                        "officer": "Academic Advisor",
+                        "date": "2026-08-24",
+                        "time_slot": "10:00 AM",
+                        "reason": "Academic Discussion"
+                    }
+                
+                apt = communication.schedule_appointment(
+                    student_id=student_id if student_id else 2,
+                    officer=data.get("officer", "Academic Advisor"),
+                    date=data.get("date", "2026-08-24"),
+                    time_slot=data.get("time_slot", "10:00 AM"),
+                    reason=data.get("reason", "Academic Discussion"),
+                    db=db
+                )
+                final_answer["communication"] = apt
+            else:
+                announcements = communication.get_announcements(db=db)
+                final_answer["communication"] = {
+                    "announcements": announcements[:3]
+                }
+
+    db.close()
 
     # Response Agent formats final result
     steps.append({
