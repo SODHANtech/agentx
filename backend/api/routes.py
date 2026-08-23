@@ -453,7 +453,8 @@ def draft_email(
 @router.post("/communications/notify")
 def send_notification(
     payload: SendNotificationSchema, 
-    admin_user: models.User = Depends(require_admin)
+    admin_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
 ):
     # RBAC restriction: Only Admin can send notifications
     title = payload.title
@@ -461,7 +462,7 @@ def send_notification(
     audience = payload.audience
     if not title or not message:
         raise HTTPException(status_code=400, detail="Title and Message are required.")
-    return communication_agent.send_notification(title, message, audience)
+    return communication_agent.send_notification(title, message, audience, db=db)
 
 
 @router.post("/communications/announcement")

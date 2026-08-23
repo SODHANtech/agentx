@@ -1,12 +1,11 @@
 import json
 from pathlib import Path
+import re
+from sqlalchemy.orm import Session
+from backend.database.session import SessionLocal
+from backend.database import models
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "student_services.json"
-GRIEVANCE_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "data"
-    / "grievances.json"
-)
 
 
 class StudentServicesAgent:
@@ -56,30 +55,46 @@ class StudentServicesAgent:
     # Grievance Ticketing System
     # =============================
 
-    def file_grievance(self, student_id: str, category: str, description: str):
+    def file_grievance(self, student_id, category: str, description: str, db: Session = None):
+        parsed_student_id = 2
+        if isinstance(student_id, int):
+            parsed_student_id = student_id
+        elif isinstance(student_id, str):
+            match = re.search(r'\d+', student_id)
+            if match:
+                parsed_student_id = int(match.group())
+                if parsed_student_id == 1:
+                    parsed_student_id = 2
+        
+        local_session = False
+        if db is None:
+            db = SessionLocal()
+            local_session = True
         try:
-            with open(GRIEVANCE_PATH, "r", encoding="utf-8") as f:
-                grievances = json.load(f)
-        except FileNotFoundError:
-            grievances = []
-
-        new_entry = {
-            "id": f"GRV_{len(grievances) + 1:03d}",
-            "student_id": student_id,
-            "category": category,
-            "description": description,
-            "status": "Pending"
-        }
-        grievances.append(new_entry)
-
-        with open(GRIEVANCE_PATH, "w", encoding="utf-8") as f:
-            json.dump(grievances, f, indent=4)
-
-        return {
-            "success": True,
-            "message": f"Grievance submitted successfully. Ticket ID: {new_entry['id']}",
-            "ticket": new_entry
-        }
+            new_comp = models.Complaint(
+                student_id=parsed_student_id,
+                department=category,
+                description=description,
+                status="Pending"
+            )
+            db.add(new_comp)
+            db.commit()
+            db.refresh(new_comp)
+            
+            return {
+                "success": True,
+                "message": f"Grievance submitted successfully. Ticket ID: GRV_{new_comp.id:03d}",
+                "ticket": {
+                    "id": f"GRV_{new_comp.id:03d}",
+                    "student_id": f"STUDENT_{new_comp.student_id}",
+                    "category": new_comp.department,
+                    "description": new_comp.description,
+                    "status": new_comp.status
+                }
+            }
+        finally:
+            if local_session:
+                db.close()
 
     # =============================
     # Smart Search
