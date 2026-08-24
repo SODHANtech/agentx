@@ -1,5 +1,22 @@
 import json
+from typing import List, Optional
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
 from backend.llm import llm
+
+class RoutingResult(BaseModel):
+    agents: List[str] = Field(
+        default=[],
+        description="The agents that should handle this query. Options: AcademicAgent, PlacementAgent, KnowledgeAgent, NotificationAgent, EventsAgent, StudentServicesAgent, ResumeAgent, CommunicationAgent."
+    )
+    day: Optional[str] = Field(
+        None,
+        description="Extracted day of the week if mentioned (e.g. 'Monday', 'Tuesday', etc.) or relative (e.g. 'tomorrow')."
+    )
+    company: Optional[str] = Field(
+        None,
+        description="Extracted company name if mentioned (Google, Microsoft, Amazon, Infosys, TCS)."
+    )
 
 SYSTEM_PROMPT = """
 You are the Intelligent Router and Entity Extractor for the Smart Campus AI.
@@ -136,58 +153,52 @@ def route(query: str) -> dict:
 
     # LEVEL 2: Fallback LLM routing check
     try:
-        response = llm.invoke(
-            SYSTEM_PROMPT + f"\n\nUser Query:\n{query}"
-        )
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", SYSTEM_PROMPT),
+            ("user", "{query}")
+        ])
         
-        text = str(response.content).strip()
-        
-        # Clean up markdown enclosures if any
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        text = text.strip()
-
-        data = json.loads(text)
+        structured_llm = llm.with_structured_output(RoutingResult)
+        chain = prompt | structured_llm
+        result = chain.invoke({"query": query})
         
         # Filter and validate active agents
         agents = [
             agent
-            for agent in data.get("agents", [])
+            for agent in result.agents
             if agent in VALID_AGENTS
         ]
-        
         agents = list(dict.fromkeys(agents))
         
-        parameters = data.get("parameters", {})
-        if not isinstance(parameters, dict):
-            parameters = {}
-            
         valid_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
         valid_companies = {"Google", "Microsoft", "Amazon", "Infosys", "TCS"}
         
-        day = parameters.get("day")
+        day = result.day
         if day and day.title() in valid_days:
-            parameters["day"] = day.title()
+            day = day.title()
         else:
-            parameters["day"] = None
+            day = None
             
-        company = parameters.get("company")
+        company = result.company
         if company:
             matched_company = next(
                 (c for c in valid_companies if c.lower() == company.lower()), 
                 None
             )
-            parameters["company"] = matched_company
+            company = matched_company
         else:
-            parameters["company"] = None
+            company = None
 
-        print("========== LEVEL 2: LLM ROUTER ==========")
+        parameters = {
+            "day": day,
+            "company": company
+        }
+
+        print("========== LEVEL 2: LLM ROUTER (STRUCTURED) ==========")
         print("Query :", query.strip())
         print("Agents:", agents)
         print("Params:", parameters)
-        print("==========================================")
+        print("======================================================")
 
         return {
             "agents": agents,

@@ -724,9 +724,10 @@ def get_admin_request_by_id(request_id: int, admin_user: models.User = Depends(r
     }
 
 @router.put("/admin/requests/{request_id}")
-def update_admin_request(
+async def update_admin_request(
     request_id: int, 
     payload: AdminRequestUpdateSchema,
+    request: Request,
     admin_user: models.User = Depends(require_admin), 
     db: Session = Depends(get_db)
 ):
@@ -781,6 +782,24 @@ def update_admin_request(
     db.add(audit)
     
     db.commit()
+    db.refresh(notif)
+    
+    # Broadcast real-time WebSocket notification
+    try:
+        manager = request.app.state.notification_manager
+        await manager.send_personal_message({
+            "id": notif.id,
+            "title": notif.title,
+            "message": notif.message,
+            "type": notif.type,
+            "related_type": notif.related_type,
+            "related_id": notif.related_id,
+            "read": notif.read,
+            "created_at": notif.created_at.isoformat() if notif.created_at else None
+        }, r.student_id)
+    except Exception as e:
+        print(f"Failed to push real-time WS notification: {e}")
+        
     return {"status": "success", "message": f"Request status updated to {new_status}"}
 
 @router.get("/student/requests")

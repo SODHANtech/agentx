@@ -13,32 +13,36 @@ import AdminEvents from "./pages/admin/AdminEvents";
 
 import ProtectedRoute from "./routes/ProtectedRoute";
 import RoleRoute from "./routes/RoleRoute";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 
 // Redirect component to check role and route accordingly
 const DashboardRedirect = () => {
-  const token = localStorage.getItem("access_token");
-  if (!token) {
+  const { user, token, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-400 flex items-center justify-center font-mono">
+        Verifying Session...
+      </div>
+    );
+  }
+  
+  if (!token || !user) {
     return <Navigate to="/login" replace />;
   }
-  try {
-    const payloadBase64 = token.split(".")[1];
-    const decodedPayload = JSON.parse(atob(payloadBase64.replace(/-/g, "+").replace(/_/g, "/")));
-    const role = decodedPayload.role || "";
-    
-    if (role.toLowerCase() === "admin") {
-      return <Navigate to="/admin" replace />;
-    } else {
-      return <Navigate to="/student" replace />;
-    }
-  } catch (e) {
-    console.error("Token decoding failed in DashboardRedirect:", e);
-    return <Navigate to="/login" replace />;
+
+  const role = user.role || "";
+  if (role.toLowerCase() === "admin") {
+    return <Navigate to="/admin" replace />;
+  } else {
+    return <Navigate to="/student" replace />;
   }
 };
 
 function App() {
   return (
-    <BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
         
@@ -147,6 +151,7 @@ function App() {
         />
       </Routes>
     </BrowserRouter>
+    </AuthProvider>
   );
 }
 
