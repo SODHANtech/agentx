@@ -36,6 +36,8 @@ from backend.agents.communications_agent import CommunicationAgent
 from backend.agents.student_services_agent import StudentServicesAgent
 from backend.agents.complaint_analyst import ComplaintAnalyst
 
+from backend.services import AuthService, RequestService, EventService, NotificationService
+
 router = APIRouter()
 
 # Instantiate agents
@@ -87,26 +89,14 @@ def require_admin(current_user: models.User = Depends(get_current_user)):
 
 @router.post("/auth/register")
 def register(payload: UserRegisterSchema, db: Session = Depends(get_db)):
-    # Check if user already exists
-    existing = db.query(models.User).filter(models.User.email == payload.email).first()
+    existing = AuthService.get_user_by_email(db, payload.email)
     if existing:
         raise HTTPException(
             status_code=400,
             detail="Account with this email already exists."
         )
     
-    new_user = models.User(
-        name=payload.name,
-        email=payload.email,
-        password_hash=hash_password(payload.password),
-        role="Student",
-        cgpa=payload.cgpa,
-        backlogs=payload.backlogs
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
+    new_user = AuthService.register_student(db, payload)
     return {
         "message": "User registered successfully",
         "user": {
@@ -119,8 +109,8 @@ def register(payload: UserRegisterSchema, db: Session = Depends(get_db)):
 
 @router.post("/auth/login")
 def login(payload: UserLoginSchema, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.password_hash):
+    user = AuthService.authenticate_user(db, payload)
+    if not user:
         raise HTTPException(
             status_code=401,
             detail="Incorrect email or password."
@@ -294,10 +284,7 @@ def get_user_notifications(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    notifications = db.query(models.Notification).filter(
-        models.Notification.recipient_id == current_user.id
-    ).order_by(models.Notification.created_at.desc()).all()
-    
+    notifications = NotificationService.get_user_notifications(db, current_user.id)
     results = []
     for n in notifications:
         results.append({
@@ -677,7 +664,7 @@ def health_check(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/admin/requests")
 def get_admin_requests(admin_user: models.User = Depends(require_admin), db: Session = Depends(get_db)):
-    requests = db.query(models.Request).order_by(models.Request.created_at.desc()).all()
+    requests = RequestService.get_all_requests(db)
     results = []
     for r in requests:
         results.append({
@@ -695,12 +682,12 @@ def get_admin_requests(admin_user: models.User = Depends(require_admin), db: Ses
 
 @router.get("/admin/requests/{request_id}")
 def get_admin_request_by_id(request_id: int, admin_user: models.User = Depends(require_admin), db: Session = Depends(get_db)):
-    r = db.query(models.Request).filter(models.Request.id == request_id).first()
+    r = RequestService.get_request_by_id(db, request_id)
     if not r:
         raise HTTPException(status_code=404, detail="Request not found.")
     
     history_logs = []
-    for h in r.history:
+    for h in RequestService.get_request_history(db, request_id):
         history_logs.append({
             "id": h.id,
             "previous_status": h.previous_status,
@@ -731,58 +718,19 @@ async def update_admin_request(
     admin_user: models.User = Depends(require_admin), 
     db: Session = Depends(get_db)
 ):
-    r = db.query(models.Request).filter(models.Request.id == request_id).first()
+    try:
+        r, notif = RequestService.update_request_status(
+            db=db,
+            request_id=request_id,
+            new_status=payload.status,
+            note=payload.note,
+            admin_id=admin_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
     if not r:
         raise HTTPException(status_code=404, detail="Request not found.")
-    
-    prev_status = r.status
-    new_status = payload.status
-    
-    # 1. Update request status
-    r.status = new_status
-    
-    # 2. Append to RequestHistory
-    history = models.RequestHistory(
-        request_id=r.id,
-        previous_status=prev_status,
-        new_status=new_status,
-        changed_by=admin_user.id,
-        note=payload.note
-    )
-    db.add(history)
-    
-    # 3. Create Notification for the student recipient
-    notif = models.Notification(
-        recipient_id=r.student_id,
-        title=f"Your {r.type} request has been {new_status.lower()}.",
-        message=f"Status update: {new_status}. Note: {payload.note or 'No notes provided by admin.'}",
-        type="RequestStatus",
-        related_type="Request",
-        related_id=r.id,
-        # Legacy fields
-        student_id=r.student_id,
-        query=f"Status update: {new_status}",
-        status="Pending"
-    )
-    db.add(notif)
-    
-    # 4. Create Admin Audit Log
-    prev_val = json.dumps({"status": prev_status})
-    new_val = json.dumps({"status": new_status, "note": payload.note})
-    
-    audit = models.AuditLog(
-        admin_id=admin_user.id,
-        action=f"{new_status} Request #{r.id}" if new_status in ["Approved", "Rejected"] else f"Updated Request #{r.id} to {new_status}",
-        module="Requests",
-        target_type="Request",
-        target_id=r.id,
-        previous_value=prev_val,
-        new_value=new_val
-    )
-    db.add(audit)
-    
-    db.commit()
-    db.refresh(notif)
     
     # Broadcast real-time WebSocket notification
     try:
@@ -800,11 +748,11 @@ async def update_admin_request(
     except Exception as e:
         print(f"Failed to push real-time WS notification: {e}")
         
-    return {"status": "success", "message": f"Request status updated to {new_status}"}
+    return {"status": "success", "message": f"Request status updated to {payload.status}"}
 
 @router.get("/student/requests")
 def get_student_requests(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    requests = db.query(models.Request).filter(models.Request.student_id == current_user.id).order_by(models.Request.created_at.desc()).all()
+    requests = RequestService.get_student_requests(db, current_user.id)
     results = []
     for r in requests:
         results.append({
@@ -825,47 +773,12 @@ def create_student_request(
     if current_user.role != "Student":
         raise HTTPException(status_code=403, detail="Operation forbidden: Only students can submit requests.")
 
-    new_req = models.Request(
+    new_req = RequestService.create_student_request(
+        db=db,
         student_id=current_user.id,
-        type=payload.type,
-        details=payload.details,
-        status="Pending"
+        request_type=payload.type,
+        details=payload.details
     )
-    db.add(new_req)
-    db.commit()
-    db.refresh(new_req)
-    
-    # Add initial RequestHistory
-    history = models.RequestHistory(
-        request_id=new_req.id,
-        previous_status=None,
-        new_status="Pending",
-        changed_by=current_user.id,
-        note="Submitted by Student"
-    )
-    db.add(history)
-    db.commit()
-
-    # Trigger custom notification for all requests
-    if "bonafide" in payload.type.lower():
-        notif_msg = "ur request to get bonafied is recieved please wait until tommorow for ur request and collect it in administatation office"
-    else:
-        notif_msg = f"ur request for {payload.type} is recieved please wait until tommorow for ur request"
-
-    notif = models.Notification(
-        recipient_id=current_user.id,
-        title="Request Received",
-        message=notif_msg,
-        type="RequestStatus",
-        related_type="Request",
-        related_id=new_req.id,
-        # Legacy fields
-        student_id=current_user.id,
-        query=notif_msg,
-        status="Pending"
-    )
-    db.add(notif)
-    db.commit()
     
     return {
         "id": new_req.id,
@@ -881,7 +794,7 @@ def get_student_request_history(
     current_user: models.User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    r = db.query(models.Request).filter(models.Request.id == request_id).first()
+    r = RequestService.get_request_by_id(db, request_id)
     if not r:
         raise HTTPException(status_code=404, detail="Request not found.")
     
@@ -889,7 +802,7 @@ def get_student_request_history(
         raise HTTPException(status_code=403, detail="Operation forbidden: Access denied to this request's records.")
         
     history_logs = []
-    for h in r.history:
+    for h in RequestService.get_request_history(db, request_id):
         history_logs.append({
             "id": h.id,
             "previous_status": h.previous_status,
@@ -954,11 +867,7 @@ def get_admin_events(
     admin_user: models.User = Depends(require_admin), 
     db: Session = Depends(get_db)
 ):
-    query_builder = db.query(models.Event)
-    if category:
-        query_builder = query_builder.filter(models.Event.category.ilike(category))
-        
-    events = query_builder.order_by(models.Event.created_at.desc()).all()
+    events = EventService.get_admin_events(db, category)
     return [serialize_event(e) for e in events]
 
 @router.post("/admin/events")
@@ -971,58 +880,7 @@ def create_admin_event(
     if existing:
         raise HTTPException(status_code=400, detail=f"Event with title '{payload.title}' already exists.")
         
-    new_event = models.Event(
-        title=payload.title,
-        category=payload.category,
-        description=payload.description,
-        venue=payload.venue,
-        start_datetime=payload.start_datetime,
-        end_datetime=payload.end_datetime,
-        registration_link=payload.registration_link,
-        max_participants=payload.max_participants,
-        published=payload.published,
-        created_by=admin_user.id,
-        organizer=payload.organizer,
-        department=payload.department,
-        banner_poster=payload.banner_poster,
-        eligibility=payload.eligibility,
-        team_size=payload.team_size,
-        prize_pool=payload.prize_pool,
-        speaker=payload.speaker
-    )
-    db.add(new_event)
-    db.commit()
-    db.refresh(new_event)
-    
-    # 1. Create Admin Audit Log
-    audit = models.AuditLog(
-        admin_id=admin_user.id,
-        action=f"Created Event #{new_event.id}",
-        module="Events",
-        target_type="Event",
-        target_id=new_event.id,
-        new_value=json.dumps(payload.dict(), default=str)
-    )
-    db.add(audit)
-    
-    # 2. If published, notify all students
-    if new_event.published:
-        students = db.query(models.User).filter(models.User.role == "Student").all()
-        for stud in students:
-            notif = models.Notification(
-                recipient_id=stud.id,
-                title=f"New {new_event.category} Published",
-                message=f"{new_event.title} is now available.",
-                type="NewEvent",
-                related_type="Event",
-                related_id=new_event.id,
-                student_id=stud.id,
-                query=f"New event: {new_event.title}",
-                status="Pending"
-            )
-            db.add(notif)
-            
-    db.commit()
+    new_event = EventService.create_event(db, payload, admin_user.id)
     return serialize_event(new_event)
 
 @router.put("/admin/events/{event_id}")
@@ -1032,38 +890,12 @@ def update_admin_event(
     admin_user: models.User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    event, venue_changed, date_changed, now_published = EventService.update_event(
+        db, event_id, payload, admin_user.id
+    )
     if not event:
         raise HTTPException(status_code=404, detail="Event not found.")
         
-    prev_val = json.dumps({
-        "title": event.title,
-        "venue": event.venue,
-        "start_datetime": event.start_datetime.isoformat() if event.start_datetime else None,
-        "published": event.published
-    }, default=str)
-    
-    venue_changed = payload.venue is not None and payload.venue != event.venue
-    date_changed = payload.start_datetime is not None and payload.start_datetime != event.start_datetime
-    now_published = payload.published is not None and payload.published and not event.published
-    
-    for field, value in payload.dict(exclude_unset=True).items():
-        setattr(event, field, value)
-        
-    db.commit()
-    
-    # Audit log
-    audit = models.AuditLog(
-        admin_id=admin_user.id,
-        action=f"Edited Event #{event.id}",
-        module="Events",
-        target_type="Event",
-        target_id=event.id,
-        previous_value=prev_val,
-        new_value=json.dumps(payload.dict(exclude_unset=True), default=str)
-    )
-    db.add(audit)
-    
     # Notify registered students
     if (venue_changed or date_changed) and event.published:
         registrations = db.query(models.EventRegistration).filter(
@@ -1113,16 +945,6 @@ def delete_admin_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found.")
         
-    audit = models.AuditLog(
-        admin_id=admin_user.id,
-        action=f"Deleted Event #{event.id}",
-        module="Events",
-        target_type="Event",
-        target_id=event.id,
-        previous_value=json.dumps({"title": event.title, "category": event.category})
-    )
-    db.add(audit)
-    
     registrations = db.query(models.EventRegistration).filter(
         models.EventRegistration.event_id == event.id,
         models.EventRegistration.status == "Registered"
@@ -1141,8 +963,7 @@ def delete_admin_event(
         )
         db.add(notif)
         
-    db.delete(event)
-    db.commit()
+    EventService.delete_event(db, event_id, admin_user.id)
     return {"status": "success", "message": "Event deleted successfully."}
 
 # ==========================================
@@ -1238,16 +1059,9 @@ def mark_notification_read(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    n = db.query(models.Notification).filter(
-        models.Notification.id == notif_id,
-        models.Notification.recipient_id == current_user.id
-    ).first()
+    n = NotificationService.mark_as_read(db, notif_id, current_user.id)
     if not n:
         raise HTTPException(status_code=404, detail="Notification not found.")
-        
-    n.read = True
-    n.status = "Read"
-    db.commit()
     return {"status": "success", "message": "Notification marked as read."}
 
 @router.put("/notifications/read-all")
@@ -1255,14 +1069,7 @@ def mark_all_notifications_read(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    notifs = db.query(models.Notification).filter(
-        models.Notification.recipient_id == current_user.id,
-        models.Notification.read == False
-    ).all()
-    for n in notifs:
-        n.read = True
-        n.status = "Read"
-    db.commit()
+    NotificationService.mark_all_as_read(db, current_user.id)
     return {"status": "success", "message": "All notifications marked as read."}
 
 # ==========================================
