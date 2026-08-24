@@ -15,6 +15,7 @@ from backend.agents.resume_agent import ResumeAgent
 from backend.agents.communications_agent import CommunicationAgent
 from backend.llm import llm
 from backend.database import models
+from backend.services import RequestService
 
 academic = AcademicAgent()
 placement = PlacementAgent()
@@ -33,10 +34,11 @@ def router_node(state):
     # Current user query
     query = messages[-1].content
 
-    # Conversation history
+    # Limit conversation history to the last 5 turns to save token usage and prevent bloat
+    recent_messages = messages[:-1][-5:]
     history = "\n".join(
         f"{msg.type}: {msg.content}"
-        for msg in messages[:-1]
+        for msg in recent_messages
     )
 
     # Fetch real student user details from the database
@@ -207,137 +209,39 @@ Current User Question:
             q_lower = query.lower()
             if "bonafide" in q_lower or "certificate" in q_lower:
                 try:
-                    # Automatically create a Request database entry
-                    new_req = models.Request(
+                    RequestService.create_student_request(
+                        db=db,
                         student_id=student_id if student_id else 2,
-                        type="Bonafide Certificate",
-                        details=f"Requested via AI Chat: '{query}'",
-                        status="Pending"
+                        request_type="Bonafide Certificate",
+                        details=f"Requested via AI Chat: '{query}'"
                     )
-                    db.add(new_req)
-                    db.commit()
-                    db.refresh(new_req)
-
-                    # Create RequestHistory
-                    history = models.RequestHistory(
-                        request_id=new_req.id,
-                        previous_status=None,
-                        new_status="Pending",
-                        changed_by=student_id if student_id else 2,
-                        note="Submitted via AI Chat"
-                    )
-                    db.add(history)
-
-                    # Trigger the student notification
-                    notif = models.Notification(
-                        recipient_id=student_id if student_id else 2,
-                        title="Request Received",
-                        message="ur request to get bonafied is recieved please wait until tommorow for ur request and collect it in administatation office",
-                        type="RequestStatus",
-                        related_type="Request",
-                        related_id=new_req.id,
-                        # Legacy fields
-                        student_id=student_id if student_id else 2,
-                        query="ur request to get bonafied is recieved please wait until tommorow for ur request and collect it in administatation office",
-                        status="Pending"
-                    )
-                    db.add(notif)
-                    db.commit()
-
                     final_answer["response"] = "Your request for a Bonafide Certificate has been submitted. A notification has been sent, and the administration has received it. You can collect it tomorrow at the administration office."
                 except Exception as e:
                     print(f"Error creating Bonafide request via agent: {e}")
-                    db.rollback()
                     final_answer["response"] = "Failed to file your Bonafide Certificate request due to a database error."
             elif "leave" in q_lower or "outing" in q_lower or "permission" in q_lower:
                 try:
-                    # Automatically create a Request database entry for Leave
-                    new_req = models.Request(
+                    RequestService.create_student_request(
+                        db=db,
                         student_id=student_id if student_id else 2,
-                        type="Leave Application",
-                        details=f"Requested via AI Chat: '{query}'",
-                        status="Pending"
+                        request_type="Leave Application",
+                        details=f"Requested via AI Chat: '{query}'"
                     )
-                    db.add(new_req)
-                    db.commit()
-                    db.refresh(new_req)
-
-                    # Create RequestHistory
-                    history = models.RequestHistory(
-                        request_id=new_req.id,
-                        previous_status=None,
-                        new_status="Pending",
-                        changed_by=student_id if student_id else 2,
-                        note="Submitted via AI Chat"
-                    )
-                    db.add(history)
-
-                    # Trigger the student notification
-                    notif_msg = f"ur request for Leave Application is recieved please wait until tommorow for ur request"
-                    notif = models.Notification(
-                        recipient_id=student_id if student_id else 2,
-                        title="Request Received",
-                        message=notif_msg,
-                        type="RequestStatus",
-                        related_type="Request",
-                        related_id=new_req.id,
-                        # Legacy fields
-                        student_id=student_id if student_id else 2,
-                        query=notif_msg,
-                        status="Pending"
-                    )
-                    db.add(notif)
-                    db.commit()
-
                     final_answer["response"] = "Your request for a Leave Application has been submitted. The administration has received it and it is currently pending review."
                 except Exception as e:
                     print(f"Error creating Leave request via agent: {e}")
-                    db.rollback()
                     final_answer["response"] = "Failed to file your Leave request due to a database error."
             elif "doubt" in q_lower or "clarification" in q_lower:
                 try:
-                    # Automatically create a Request database entry for Doubt
-                    new_req = models.Request(
+                    RequestService.create_student_request(
+                        db=db,
                         student_id=student_id if student_id else 2,
-                        type="Doubt Clearance",
-                        details=f"Requested via AI Chat: '{query}'",
-                        status="Pending"
+                        request_type="Doubt Clearance",
+                        details=f"Requested via AI Chat: '{query}'"
                     )
-                    db.add(new_req)
-                    db.commit()
-                    db.refresh(new_req)
-
-                    # Create RequestHistory
-                    history = models.RequestHistory(
-                        request_id=new_req.id,
-                        previous_status=None,
-                        new_status="Pending",
-                        changed_by=student_id if student_id else 2,
-                        note="Submitted via AI Chat"
-                    )
-                    db.add(history)
-
-                    # Trigger the student notification
-                    notif_msg = f"ur request for Doubt Clearance is recieved please wait until tommorow for ur request"
-                    notif = models.Notification(
-                        recipient_id=student_id if student_id else 2,
-                        title="Request Received",
-                        message=notif_msg,
-                        type="RequestStatus",
-                        related_type="Request",
-                        related_id=new_req.id,
-                        # Legacy fields
-                        student_id=student_id if student_id else 2,
-                        query=notif_msg,
-                        status="Pending"
-                    )
-                    db.add(notif)
-                    db.commit()
-
                     final_answer["response"] = "Your request for Doubt Clearance has been submitted. The academic team has received it and it is currently pending review."
                 except Exception as e:
                     print(f"Error creating Doubt request via agent: {e}")
-                    db.rollback()
                     final_answer["response"] = "Failed to file your Doubt request due to a database error."
             else:
                 final_answer["student_services"] = student_services.search_services(query)
