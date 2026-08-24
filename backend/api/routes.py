@@ -36,7 +36,7 @@ from backend.agents.communications_agent import CommunicationAgent
 from backend.agents.student_services_agent import StudentServicesAgent
 from backend.agents.complaint_analyst import ComplaintAnalyst
 
-from backend.services import AuthService, RequestService, EventService, NotificationService
+from backend.services import AuthService, RequestService, EventService, NotificationService, StorageService
 from backend.core.rate_limit import rate_limit_login, rate_limit_ai, rate_limit_requests, rate_limit_events
 
 router = APIRouter()
@@ -547,12 +547,7 @@ async def analyze_resume(
             detail="File size exceeds the maximum limit of 5MB."
         )
 
-    upload_dir = "backend/data/uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, file.filename)
-
-    with open(file_path, "wb") as f:
-        f.write(content)
+    file_path = StorageService.save_file(file, content, file.filename)
 
     try:
         return resume_agent.analyze_resume(file_path)
