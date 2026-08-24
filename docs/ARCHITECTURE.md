@@ -1,7 +1,7 @@
-# CampusOS Architecture Specification — Final Target State
+# CampusOS Architecture Specification — Phase 2 Target State
 
 ## Overview
-CampusOS is an AI-powered student assistant and administrative coordinator application with a React-based frontend and FastAPI-based backend. Following the architectural refactoring, SQLite acts as the single source of truth for all mutable application state.
+CampusOS is an AI-powered student assistant and administrative coordinator application featuring a React-based frontend SPA and a FastAPI-based backend. SQLite is the single source of truth for all mutable application state.
 
 ```
 +------------------+           HTTP           +-----------------+
@@ -18,41 +18,164 @@ CampusOS is an AI-powered student assistant and administrative coordinator appli
                                     +---------------+     +---------------+
 ```
 
-## Functional Components
+---
 
-### 1. Frontend SPA Routing & Role Guards
-*   **Routing Logic:** Defined in [`App.jsx`](file:///e:/Agentx/frontend/src/App.jsx).
-*   **Security Guards:** `<ProtectedRoute>` in [`ProtectedRoute.jsx`](file:///e:/Agentx/frontend/src/components/ProtectedRoute.jsx) parses JWT tokens from `localStorage` to enforce role verification.
-*   **Role Separation:** The `Sidebar.jsx` and `Communications.jsx` tabs dynamically adjust options based on the user's role:
-    *   **Admin**: Access to "Complaint Radar" (semantic clustering and broadcast) and administrative notification/announcement forms.
-    *   **Student**: Forbidden from accessing `/admin-radar` routes and administrative dashboard capabilities.
-*   **Error Interceptor:** Axios automatically clears tokens and redirects to `/login` if any backend API request returns a `401 Unauthorized` status.
+## 1. Relational Database Design
+The SQLite database (`campus.db`) tracks all mutable state. Phase 2 unifies events, notifications, and logging into a single relational scheme.
 
-### 2. Backend Gateway & API Controllers
-*   **Server Setup:** FastAPI gateway running via Uvicorn in [`main.py`](file:///e:/Agentx/backend/main.py).
-*   **Routing:** Defined in [`routes.py`](file:///e:/Agentx/backend/api/routes.py).
-*   **Auth Verification:** Handled using `get_current_user` to match database profiles. Self-registration forces the `Student` role on new accounts.
-*   **Role-Based Access Control (RBAC):** Administrative endpoints (such as `/admin/clusters` and `/admin/clusters/{cluster_id}/broadcast`) are guarded by the `require_admin` dependency.
+### Schemas
 
-### 3. Agent Coordination (LangGraph)
-*   **Graph Setup:** StateGraph orchestrator in [`graph.py`](file:///e:/Agentx/backend/graph.py).
-*   **Execution Nodes:** Defined in [`nodes.py`](file:///e:/Agentx/backend/nodes.py). Contains handler branches for all active agents.
-*   **Completed Agent Loops:**
-    *   `ResumeAgent`: Returns a controlled prompt instruction if no resume is uploaded.
-    *   `CommunicationAgent`: Extracts email parameters or appointment slots via LLM helper prompts, performing actions directly in SQLite.
-*   **Deterministic Routing:** Keywords are isolated and analyzed directly from the current user question in `router.py`, preventing historical conversation context from corrupting regex router matches.
+#### User Table (`users`)
+*   `id` (INTEGER, PK, Autoincrement)
+*   `name` (VARCHAR, Not Null)
+*   `email` (VARCHAR, Unique, Indexed, Not Null)
+*   `password_hash` (VARCHAR, Not Null)
+*   `role` (VARCHAR, Default 'Student') — `'Student' | 'Admin'`
+*   `status` (VARCHAR, Default 'Active') — `'Active' | 'Suspended'`
+*   `cgpa` (FLOAT, Default 0.0)
+*   `backlogs` (INTEGER, Default 0)
+*   `roll_number` (VARCHAR, Nullable) — Student Roll Number
+*   `department` (VARCHAR, Nullable) — Sponsoring/Major Department
+*   `created_at` (DATETIME, Default current_timestamp)
 
-### 4. Storage & Persistence Setup
-*   **Relational Database:** SQLite (`campus.db`) mapped via SQLAlchemy models in `backend/database/models.py`. Actively tracks:
-    *   `User`: Student and Administrator profiles.
-    *   `Complaint` & `ComplaintCluster`: Student grievances and semantic clusters.
-    *   `EventRegistration`: User registrations for campus events.
-    *   `Appointment` & `Notification`: Scheduled slots and notifications.
-    *   `Announcement`: Systemic resolutions and announcements.
-*   **Vector DB:** Chroma vector store in `backend/vector_db/` for handbook text retrieval.
-*   **Static Asset Stores:** Flat JSON files inside `backend/data/` for immutable data only (`timetable.json`, `events.json`, `companies.json`, `student_services.json`). All mutable JSON files have been deleted.
+#### Requests Table (`requests`)
+*   `id` (INTEGER, PK, Autoincrement)
+*   `student_id` (INTEGER, FK -> `users.id`, Not Null)
+*   `type` (VARCHAR, Not Null) — `'Bonafide' | 'Leave' | 'Doubt'`
+*   `details` (TEXT, Not Null)
+*   `status` (VARCHAR, Default 'Pending') — `'Pending' | 'Under Review' | 'Approved' | 'Rejected' | 'Completed'`
+*   `created_at` (DATETIME, Default current_timestamp)
 
-### 5. Security & Verification
-*   **Secret Keys:** The application validates that default insecure JWT secrets are not allowed in production environments in `backend/config.py`.
-*   **Upload Boundaries:** Resume uploads enforce a strict 5MB size limit and require `application/pdf` MIME type and file extension matching.
-*   **Automated Verification:** Verified by `backend/scripts/test_rest_endpoints.py` covering Auth, RBAC, Event isolation, Grievance flow, and file upload validations.
+#### Request History Table (`request_histories`)
+*   `id` (INTEGER, PK, Autoincrement)
+*   `request_id` (INTEGER, FK -> `requests.id`, Not Null)
+*   `previous_status` (VARCHAR, Nullable)
+*   `new_status` (VARCHAR, Not Null)
+*   `changed_by` (INTEGER, FK -> `users.id`, Not Null)
+*   `note` (TEXT, Nullable)
+*   `timestamp` (DATETIME, Default current_timestamp)
+
+#### Unified Events Table (`events`)
+*   `id` (INTEGER, PK, Autoincrement)
+*   `title` (VARCHAR, Unique, Indexed, Not Null)
+*   `category` (VARCHAR, Not Null) — `'Event' | 'Hackathon' | 'Seminar' | 'Workshop' | 'Competition' | 'Guest Lecture'`
+*   `description` (TEXT, Not Null)
+*   `venue` (VARCHAR, Not Null)
+*   `start_datetime` (DATETIME, Not Null)
+*   `end_datetime` (DATETIME, Not Null)
+*   `registration_link` (VARCHAR, Nullable)
+*   `max_participants` (INTEGER, Default 0)
+*   `published` (BOOLEAN, Default False)
+*   `created_by` (INTEGER, FK -> `users.id`, Not Null)
+*   `created_at` (DATETIME, Default current_timestamp)
+*   `organizer` (VARCHAR, Nullable) — Club/Association hosting the event
+*   `department` (VARCHAR, Nullable) — Academic department hosting
+*   `banner_poster` (VARCHAR, Nullable) — URL/Path to graphics asset
+*   `eligibility` (VARCHAR, Nullable) — CGPA/Department constraints
+*   `team_size` (INTEGER, Nullable) — Team limits (Competitions)
+*   `prize_pool` (VARCHAR, Nullable) — Cash/Reward details
+*   `speaker` (VARCHAR, Nullable) — Speaker details (Seminars)
+
+#### Event Registrations Table (`event_registrations`)
+*   `id` (INTEGER, PK, Autoincrement)
+*   `event_id` (INTEGER, FK -> `events.id`, Not Null)
+*   `student_id` (INTEGER, FK -> `users.id`, Not Null)
+*   `registered_at` (DATETIME, Default current_timestamp)
+*   `status` (VARCHAR, Default 'Registered') — `'Registered' | 'Cancelled'`
+
+#### Notifications Table (`notifications`)
+*   `id` (INTEGER, PK, Autoincrement)
+*   `recipient_id` (INTEGER, FK -> `users.id`, Not Null)
+*   `title` (VARCHAR, Not Null)
+*   `message` (TEXT, Not Null)
+*   `type` (VARCHAR, Not Null) — `'RequestStatus' | 'NewEvent' | 'EventUpdate' | 'RegistrationClosing' | 'Reminder'`
+*   `related_type` (VARCHAR, Nullable) — `'Request' | 'Event'`
+*   `related_id` (INTEGER, Nullable)
+*   `read` (BOOLEAN, Default False)
+*   `created_at` (DATETIME, Default current_timestamp)
+*   *Legacy fields (for backward compatibility):*
+    *   `student_id` (INTEGER, FK -> `users.id`, Nullable)
+    *   `query` (TEXT, Nullable)
+    *   `status` (VARCHAR, Default 'Pending') — `'Pending' | 'Read'`
+
+#### Admin Audit Logs Table (`audit_logs`)
+*   `id` (INTEGER, PK, Autoincrement)
+*   `admin_id` (INTEGER, FK -> `users.id`, Not Null)
+*   `action` (VARCHAR, Not Null) — Description (e.g. `"Approved Request #42"`)
+*   `module` (VARCHAR, Not Null) — `'Requests' | 'Events' | 'Users' | 'Settings'`
+*   `target_type` (VARCHAR, Not Null) — `'Request' | 'Event' | 'User'`
+*   `target_id` (INTEGER, Not Null)
+*   `previous_value` (TEXT, Nullable) — JSON string snapshot before action
+*   `new_value` (TEXT, Nullable) — JSON string snapshot after action
+*   `timestamp` (DATETIME, Default current_timestamp)
+
+---
+
+## 2. API Gateways & Routing (FastAPI)
+The backend expose standard REST resources under `/api/v1` routes:
+
+### Authentication & Profiles
+*   `POST /auth/register` — Standard student registration (forces role to `Student`).
+*   `POST /auth/login` — Returns JWT tokens.
+*   `GET /auth/me` — Fetches current user profile details.
+
+### Unified Events
+*   `GET /events?category={category}` — Returns published events (Students/Public).
+*   `GET /events/{id}` — Detail view of a single event.
+*   `GET /admin/events?category={category}` — Returns all events (Admin only).
+*   `POST /admin/events` — Create an event (Admin only). Registers audit logs.
+*   `PUT /admin/events/{id}` — Edit an event (Admin only). Registers audit logs, dispatches alerts.
+*   `DELETE /admin/events/{id}` — Delete an event (Admin only). Registers audit logs, dispatches cancellation notifications.
+
+### Event Registrations
+*   `POST /events/{id}/register` — Register student for an event.
+*   `DELETE /events/{id}/register` — Cancel registration.
+*   `GET /student/event-registrations` — View active event registrations.
+
+### Notifications
+*   `GET /notifications` — Fetches user notifications (legacy compatibility support).
+*   `PUT /notifications/{id}/read` — Set read status to `True`.
+*   `PUT /notifications/read-all` — Sets all unread notifications to read.
+
+### Audit Logging
+*   `GET /admin/audit-logs` — Fetches paginated audit logs (Admin only).
+
+---
+
+## 3. Frontend Architecture (React SPA)
+
+### Sidebar Layouts
+The application implements Role-Based Access Control (RBAC) in navigation links:
+
+*   **Student Sidebar:**
+    *   Dashboard
+    *   Events
+    *   Notifications
+    *   Student Services
+    *   Communications
+*   **Admin Sidebar:**
+    *   Dashboard
+    *   Student Requests
+    *   Events (Unified panel with Client-Side category tags)
+    *   Users
+    *   Notifications (Broadcasts builder)
+    *   Analytics
+    *   Audit Logs
+    *   Settings
+
+### Events Filter & Dynamic Creator
+*   Filtering is handled using horizontal category selectors inside the Event module.
+*   The event creation panel uses a dynamic form structure that expands/collapses inputs (e.g. `team_size` or `speaker`) based on the chosen category type.
+
+---
+
+## 4. Agent Coordination (LangGraph)
+*   **Supervisor Routing:** Standard StateGraph routing layers parse student inquiries to query database entries directly.
+*   **EventsAgent:** Handles conversational queries regarding upcoming schedules and registration states by executing direct SQL operations on the unified `events` table.
+*   **NotificationAgent:** Logs reminders into the `notifications` table utilizing backward compatible fields.
+
+---
+
+## 5. Security & Retention
+*   **Upload Safety:** File uploads are limited to 5MB and validated to ensure only `application/pdf` MIME types are allowed.
+*   **Audit Log Lifecycle:** Logs older than 90 days are moved to `campus_audit_archive.db`; logs older than 365 days are exported to JSONL format and purged from active storage.

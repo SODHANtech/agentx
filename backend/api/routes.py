@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Response, Depend
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import time
+from typing import Optional, List
 from langchain_core.messages import HumanMessage
 import json
 import os
@@ -19,7 +20,11 @@ from backend.api.schemas import (
     DraftEmailSchema,
     SendNotificationSchema,
     CreateAnnouncementSchema,
-    ScheduleAppointmentSchema
+    ScheduleAppointmentSchema,
+    StudentRequestCreateSchema,
+    AdminRequestUpdateSchema,
+    AdminEventCreateSchema,
+    AdminEventUpdateSchema
 )
 
 from backend.agents.academic_agent import AcademicAgent
@@ -285,18 +290,40 @@ def dashboard_data(
 
 
 @router.get("/notifications")
-def notifications(
+def get_user_notifications(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    base_notifications = dashboard.get_dashboard(student_id=current_user.id, db=db).get("notifications", [])
-    event_reminders = events_agent.get_event_reminders(current_user.id, db=db)
-    return base_notifications + event_reminders
+    notifications = db.query(models.Notification).filter(
+        models.Notification.recipient_id == current_user.id
+    ).order_by(models.Notification.created_at.desc()).all()
+    
+    results = []
+    for n in notifications:
+        results.append({
+            "id": n.id,
+            "title": n.title or "Reminder Alert",
+            "message": n.message or n.query,
+            "type": n.type or "Reminder",
+            "related_type": n.related_type,
+            "related_id": n.related_id,
+            "read": n.read,
+            "created_at": n.created_at.isoformat()
+        })
+    return results
 
 
 @router.get("/events")
-def get_events(current_user: models.User = Depends(get_current_user)):
-    return events_agent.get_events()
+def get_published_events(
+    category: Optional[str] = None, 
+    db: Session = Depends(get_db)
+):
+    query_builder = db.query(models.Event).filter(models.Event.published == True)
+    if category:
+        query_builder = query_builder.filter(models.Event.category.ilike(category))
+    
+    events = query_builder.order_by(models.Event.start_datetime.asc()).all()
+    return events
 
 
 @router.get("/classes/{day}")
@@ -652,3 +679,605 @@ def health_check(request: Request, db: Session = Depends(get_db)):
         "students": students,
         "admins": admins
     }
+
+
+# ==========================================
+# Requests Endpoints
+# ==========================================
+
+@router.get("/admin/requests")
+def get_admin_requests(admin_user: models.User = Depends(require_admin), db: Session = Depends(get_db)):
+    requests = db.query(models.Request).order_by(models.Request.created_at.desc()).all()
+    results = []
+    for r in requests:
+        results.append({
+            "id": r.id,
+            "student_id": r.student_id,
+            "student_name": r.student.name if r.student else "Unknown",
+            "roll_number": r.student.roll_number if r.student else "",
+            "department": r.student.department if r.student else "",
+            "type": r.type,
+            "details": r.details,
+            "status": r.status,
+            "created_at": r.created_at.isoformat()
+        })
+    return results
+
+@router.get("/admin/requests/{request_id}")
+def get_admin_request_by_id(request_id: int, admin_user: models.User = Depends(require_admin), db: Session = Depends(get_db)):
+    r = db.query(models.Request).filter(models.Request.id == request_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Request not found.")
+    
+    history_logs = []
+    for h in r.history:
+        history_logs.append({
+            "id": h.id,
+            "previous_status": h.previous_status,
+            "new_status": h.new_status,
+            "changed_by_name": h.changer.name if h.changer else "System",
+            "note": h.note,
+            "timestamp": h.timestamp.isoformat()
+        })
+
+    return {
+        "id": r.id,
+        "student_id": r.student_id,
+        "student_name": r.student.name if r.student else "Unknown",
+        "roll_number": r.student.roll_number if r.student else "",
+        "department": r.student.department if r.student else "",
+        "type": r.type,
+        "details": r.details,
+        "status": r.status,
+        "created_at": r.created_at.isoformat(),
+        "history": history_logs
+    }
+
+@router.put("/admin/requests/{request_id}")
+def update_admin_request(
+    request_id: int, 
+    payload: AdminRequestUpdateSchema,
+    admin_user: models.User = Depends(require_admin), 
+    db: Session = Depends(get_db)
+):
+    r = db.query(models.Request).filter(models.Request.id == request_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Request not found.")
+    
+    prev_status = r.status
+    new_status = payload.status
+    
+    # 1. Update request status
+    r.status = new_status
+    
+    # 2. Append to RequestHistory
+    history = models.RequestHistory(
+        request_id=r.id,
+        previous_status=prev_status,
+        new_status=new_status,
+        changed_by=admin_user.id,
+        note=payload.note
+    )
+    db.add(history)
+    
+    # 3. Create Notification for the student recipient
+    notif = models.Notification(
+        recipient_id=r.student_id,
+        title=f"Your {r.type} request has been {new_status.lower()}.",
+        message=f"Status update: {new_status}. Note: {payload.note or 'No notes provided by admin.'}",
+        type="RequestStatus",
+        related_type="Request",
+        related_id=r.id,
+        # Legacy fields
+        student_id=r.student_id,
+        query=f"Status update: {new_status}",
+        status="Pending"
+    )
+    db.add(notif)
+    
+    # 4. Create Admin Audit Log
+    prev_val = json.dumps({"status": prev_status})
+    new_val = json.dumps({"status": new_status, "note": payload.note})
+    
+    audit = models.AuditLog(
+        admin_id=admin_user.id,
+        action=f"{new_status} Request #{r.id}" if new_status in ["Approved", "Rejected"] else f"Updated Request #{r.id} to {new_status}",
+        module="Requests",
+        target_type="Request",
+        target_id=r.id,
+        previous_value=prev_val,
+        new_value=new_val
+    )
+    db.add(audit)
+    
+    db.commit()
+    return {"status": "success", "message": f"Request status updated to {new_status}"}
+
+@router.get("/student/requests")
+def get_student_requests(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    requests = db.query(models.Request).filter(models.Request.student_id == current_user.id).order_by(models.Request.created_at.desc()).all()
+    results = []
+    for r in requests:
+        results.append({
+            "id": r.id,
+            "type": r.type,
+            "details": r.details,
+            "status": r.status,
+            "created_at": r.created_at.isoformat()
+        })
+    return results
+
+@router.post("/student/requests")
+def create_student_request(
+    payload: StudentRequestCreateSchema,
+    current_user: models.User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "Student":
+        raise HTTPException(status_code=403, detail="Operation forbidden: Only students can submit requests.")
+
+    new_req = models.Request(
+        student_id=current_user.id,
+        type=payload.type,
+        details=payload.details,
+        status="Pending"
+    )
+    db.add(new_req)
+    db.commit()
+    db.refresh(new_req)
+    
+    # Add initial RequestHistory
+    history = models.RequestHistory(
+        request_id=new_req.id,
+        previous_status=None,
+        new_status="Pending",
+        changed_by=current_user.id,
+        note="Submitted by Student"
+    )
+    db.add(history)
+    db.commit()
+    
+    return {
+        "id": new_req.id,
+        "type": new_req.type,
+        "details": new_req.details,
+        "status": new_req.status,
+        "created_at": new_req.created_at.isoformat()
+    }
+
+@router.get("/student/requests/{request_id}/history")
+def get_student_request_history(
+    request_id: int, 
+    current_user: models.User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    r = db.query(models.Request).filter(models.Request.id == request_id).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Request not found.")
+    
+    if r.student_id != current_user.id and current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Operation forbidden: Access denied to this request's records.")
+        
+    history_logs = []
+    for h in r.history:
+        history_logs.append({
+            "id": h.id,
+            "previous_status": h.previous_status,
+            "new_status": h.new_status,
+            "changed_by_name": h.changer.name if h.changer else "System",
+            "note": h.note,
+            "timestamp": h.timestamp.isoformat()
+        })
+    return history_logs
+
+# ==========================================
+# Unified Events Endpoints
+# ==========================================
+
+def serialize_event(e: models.Event):
+    return {
+        "id": e.id,
+        "title": e.title,
+        "category": e.category,
+        "description": e.description,
+        "venue": e.venue,
+        "start_datetime": e.start_datetime.isoformat() if e.start_datetime else None,
+        "end_datetime": e.end_datetime.isoformat() if e.end_datetime else None,
+        "registration_link": e.registration_link,
+        "max_participants": e.max_participants,
+        "published": e.published,
+        "created_by": e.created_by,
+        "organizer": e.organizer,
+        "department": e.department,
+        "banner_poster": e.banner_poster,
+        "eligibility": e.eligibility,
+        "team_size": e.team_size,
+        "prize_pool": e.prize_pool,
+        "speaker": e.speaker,
+        "created_at": e.created_at.isoformat() if e.created_at else None
+    }
+
+@router.get("/events")
+def get_published_events(
+    category: Optional[str] = None, 
+    db: Session = Depends(get_db)
+):
+    query_builder = db.query(models.Event).filter(models.Event.published == True)
+    if category:
+        query_builder = query_builder.filter(models.Event.category.ilike(category))
+    
+    events = query_builder.order_by(models.Event.start_datetime.asc()).all()
+    return [serialize_event(e) for e in events]
+
+@router.get("/events/{event_id}")
+def get_single_event(event_id: int, db: Session = Depends(get_db)):
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    return serialize_event(event)
+
+@router.get("/admin/events")
+def get_admin_events(
+    category: Optional[str] = None,
+    admin_user: models.User = Depends(require_admin), 
+    db: Session = Depends(get_db)
+):
+    query_builder = db.query(models.Event)
+    if category:
+        query_builder = query_builder.filter(models.Event.category.ilike(category))
+        
+    events = query_builder.order_by(models.Event.created_at.desc()).all()
+    return [serialize_event(e) for e in events]
+
+@router.post("/admin/events")
+def create_admin_event(
+    payload: AdminEventCreateSchema,
+    admin_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(models.Event).filter(models.Event.title.ilike(payload.title)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Event with title '{payload.title}' already exists.")
+        
+    new_event = models.Event(
+        title=payload.title,
+        category=payload.category,
+        description=payload.description,
+        venue=payload.venue,
+        start_datetime=payload.start_datetime,
+        end_datetime=payload.end_datetime,
+        registration_link=payload.registration_link,
+        max_participants=payload.max_participants,
+        published=payload.published,
+        created_by=admin_user.id,
+        organizer=payload.organizer,
+        department=payload.department,
+        banner_poster=payload.banner_poster,
+        eligibility=payload.eligibility,
+        team_size=payload.team_size,
+        prize_pool=payload.prize_pool,
+        speaker=payload.speaker
+    )
+    db.add(new_event)
+    db.commit()
+    db.refresh(new_event)
+    
+    # 1. Create Admin Audit Log
+    audit = models.AuditLog(
+        admin_id=admin_user.id,
+        action=f"Created Event #{new_event.id}",
+        module="Events",
+        target_type="Event",
+        target_id=new_event.id,
+        new_value=json.dumps(payload.dict(), default=str)
+    )
+    db.add(audit)
+    
+    # 2. If published, notify all students
+    if new_event.published:
+        students = db.query(models.User).filter(models.User.role == "Student").all()
+        for stud in students:
+            notif = models.Notification(
+                recipient_id=stud.id,
+                title=f"New {new_event.category} Published",
+                message=f"{new_event.title} is now available.",
+                type="NewEvent",
+                related_type="Event",
+                related_id=new_event.id,
+                student_id=stud.id,
+                query=f"New event: {new_event.title}",
+                status="Pending"
+            )
+            db.add(notif)
+            
+    db.commit()
+    return serialize_event(new_event)
+
+@router.put("/admin/events/{event_id}")
+def update_admin_event(
+    event_id: int,
+    payload: AdminEventUpdateSchema,
+    admin_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+        
+    prev_val = json.dumps({
+        "title": event.title,
+        "venue": event.venue,
+        "start_datetime": event.start_datetime.isoformat() if event.start_datetime else None,
+        "published": event.published
+    }, default=str)
+    
+    venue_changed = payload.venue is not None and payload.venue != event.venue
+    date_changed = payload.start_datetime is not None and payload.start_datetime != event.start_datetime
+    now_published = payload.published is not None and payload.published and not event.published
+    
+    for field, value in payload.dict(exclude_unset=True).items():
+        setattr(event, field, value)
+        
+    db.commit()
+    
+    # Audit log
+    audit = models.AuditLog(
+        admin_id=admin_user.id,
+        action=f"Edited Event #{event.id}",
+        module="Events",
+        target_type="Event",
+        target_id=event.id,
+        previous_value=prev_val,
+        new_value=json.dumps(payload.dict(exclude_unset=True), default=str)
+    )
+    db.add(audit)
+    
+    # Notify registered students
+    if (venue_changed or date_changed) and event.published:
+        registrations = db.query(models.EventRegistration).filter(
+            models.EventRegistration.event_id == event.id,
+            models.EventRegistration.status == "Registered"
+        ).all()
+        for r in registrations:
+            notif = models.Notification(
+                recipient_id=r.student_id,
+                title="Event Updated",
+                message=f"The details for {event.title} have changed. Venue: {event.venue}.",
+                type="EventUpdate",
+                related_type="Event",
+                related_id=event.id,
+                student_id=r.student_id,
+                query=f"Updated details: {event.title}",
+                status="Pending"
+            )
+            db.add(notif)
+            
+    elif now_published:
+        students = db.query(models.User).filter(models.User.role == "Student").all()
+        for stud in students:
+            notif = models.Notification(
+                recipient_id=stud.id,
+                title=f"New {event.category} Published",
+                message=f"{event.title} is now available.",
+                type="NewEvent",
+                related_type="Event",
+                related_id=event.id,
+                student_id=stud.id,
+                query=f"New event: {event.title}",
+                status="Pending"
+            )
+            db.add(notif)
+            
+    db.commit()
+    return serialize_event(event)
+
+@router.delete("/admin/events/{event_id}")
+def delete_admin_event(
+    event_id: int,
+    admin_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+        
+    audit = models.AuditLog(
+        admin_id=admin_user.id,
+        action=f"Deleted Event #{event.id}",
+        module="Events",
+        target_type="Event",
+        target_id=event.id,
+        previous_value=json.dumps({"title": event.title, "category": event.category})
+    )
+    db.add(audit)
+    
+    registrations = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event.id,
+        models.EventRegistration.status == "Registered"
+    ).all()
+    for r in registrations:
+        notif = models.Notification(
+            recipient_id=r.student_id,
+            title="Event Cancelled",
+            message=f"The event '{event.title}' has been cancelled by the administration.",
+            type="EventUpdate",
+            related_type="Event",
+            related_id=event.id,
+            student_id=r.student_id,
+            query=f"Event cancelled: {event.title}",
+            status="Pending"
+        )
+        db.add(notif)
+        
+    db.delete(event)
+    db.commit()
+    return {"status": "success", "message": "Event deleted successfully."}
+
+# ==========================================
+# Registrations Endpoints
+# ==========================================
+
+@router.post("/events/{event_id}/register")
+def student_register_event(
+    event_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "Student":
+        raise HTTPException(status_code=403, detail="Operation forbidden: Only students can register for events.")
+
+    event = db.query(models.Event).filter(
+        models.Event.id == event_id, 
+        models.Event.published == True
+    ).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found or not published.")
+        
+    existing = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.student_id == current_user.id
+    ).first()
+    
+    if existing:
+        if existing.status == "Registered":
+            raise HTTPException(status_code=400, detail="You are already registered for this event.")
+        else:
+            existing.status = "Registered"
+            existing.registered_at = datetime.utcnow()
+            db.commit()
+            return {"status": "success", "message": "Successfully registered."}
+            
+    new_reg = models.EventRegistration(
+        event_id=event_id,
+        student_id=current_user.id,
+        status="Registered"
+    )
+    db.add(new_reg)
+    db.commit()
+    return {"status": "success", "message": "Successfully registered."}
+
+@router.delete("/events/{event_id}/register")
+def student_cancel_event_registration(
+    event_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.student_id == current_user.id,
+        models.EventRegistration.status == "Registered"
+    ).first()
+    
+    if not reg:
+        raise HTTPException(status_code=404, detail="No active registration found for this event.")
+        
+    reg.status = "Cancelled"
+    db.commit()
+    return {"status": "success", "message": "Successfully cancelled registration."}
+
+@router.get("/student/event-registrations")
+def get_student_event_registrations(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    regs = db.query(models.EventRegistration).filter(
+        models.EventRegistration.student_id == current_user.id,
+        models.EventRegistration.status == "Registered"
+    ).all()
+    
+    results = []
+    for r in regs:
+        if r.event:
+            results.append({
+                "id": r.id,
+                "event_id": r.event_id,
+                "title": r.event.title,
+                "category": r.event.category,
+                "venue": r.event.venue,
+                "date": r.event.start_datetime.strftime("%Y-%m-%d") if r.event.start_datetime else ""
+            })
+    return results
+
+
+
+@router.put("/notifications/{notif_id}/read")
+def mark_notification_read(
+    notif_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    n = db.query(models.Notification).filter(
+        models.Notification.id == notif_id,
+        models.Notification.recipient_id == current_user.id
+    ).first()
+    if not n:
+        raise HTTPException(status_code=404, detail="Notification not found.")
+        
+    n.read = True
+    n.status = "Read"
+    db.commit()
+    return {"status": "success", "message": "Notification marked as read."}
+
+@router.put("/notifications/read-all")
+def mark_all_notifications_read(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    notifs = db.query(models.Notification).filter(
+        models.Notification.recipient_id == current_user.id,
+        models.Notification.read == False
+    ).all()
+    for n in notifs:
+        n.read = True
+        n.status = "Read"
+    db.commit()
+    return {"status": "success", "message": "All notifications marked as read."}
+
+# ==========================================
+# Audit Logs Endpoints
+# ==========================================
+
+@router.get("/admin/audit-logs")
+def get_admin_audit_logs(
+    admin_id: Optional[int] = None,
+    module: Optional[str] = None,
+    action: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    admin_user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    query_builder = db.query(models.AuditLog)
+    if admin_id:
+        query_builder = query_builder.filter(models.AuditLog.admin_id == admin_id)
+    if module:
+        query_builder = query_builder.filter(models.AuditLog.module.ilike(module))
+    if action:
+        query_builder = query_builder.filter(models.AuditLog.action.ilike(f"%{action}%"))
+        
+    total_count = query_builder.count()
+    offset = (page - 1) * limit
+    logs = query_builder.order_by(models.AuditLog.timestamp.desc()).offset(offset).limit(limit).all()
+    
+    results = []
+    for l in logs:
+        results.append({
+            "id": l.id,
+            "admin_id": l.admin_id,
+            "admin_name": l.admin.name if l.admin else "Unknown",
+            "action": l.action,
+            "module": l.module,
+            "target_type": l.target_type,
+            "target_id": l.target_id,
+            "previous_value": l.previous_value,
+            "new_value": l.new_value,
+            "timestamp": l.timestamp.isoformat()
+        })
+        
+    return {
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "logs": results
+    }
+
