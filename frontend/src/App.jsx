@@ -8,6 +8,8 @@ import Notifications from "./pages/Notifications";
 import StudentServices from "./pages/StudentServices";
 import Communications from "./pages/Communications";
 import AdminRadar from "./pages/AdminRadar";
+import AdminRequests from "./pages/admin/AdminRequests";
+import AdminEvents from "./pages/admin/AdminEvents";
 
 import ProtectedRoute from "./routes/ProtectedRoute";
 import RoleRoute from "./routes/RoleRoute";
@@ -119,6 +121,26 @@ function App() {
             <ProtectedRoute>
               <RoleRoute allowedRole="Admin">
                 <AdminRadar />
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/requests"
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRole="Admin">
+                <AdminRequests />
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/events"
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRole="Admin">
+                <AdminEvents />
               </RoleRoute>
             </ProtectedRoute>
           }

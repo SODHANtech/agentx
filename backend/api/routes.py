@@ -313,17 +313,7 @@ def get_user_notifications(
     return results
 
 
-@router.get("/events")
-def get_published_events(
-    category: Optional[str] = None, 
-    db: Session = Depends(get_db)
-):
-    query_builder = db.query(models.Event).filter(models.Event.published == True)
-    if category:
-        query_builder = query_builder.filter(models.Event.category.ilike(category))
-    
-    events = query_builder.order_by(models.Event.start_datetime.asc()).all()
-    return events
+
 
 
 @router.get("/classes/{day}")
@@ -836,6 +826,27 @@ def create_student_request(
     )
     db.add(history)
     db.commit()
+
+    # Trigger custom notification for all requests
+    if "bonafide" in payload.type.lower():
+        notif_msg = "ur request to get bonafied is recieved please wait until tommorow for ur request and collect it in administatation office"
+    else:
+        notif_msg = f"ur request for {payload.type} is recieved please wait until tommorow for ur request"
+
+    notif = models.Notification(
+        recipient_id=current_user.id,
+        title="Request Received",
+        message=notif_msg,
+        type="RequestStatus",
+        related_type="Request",
+        related_id=new_req.id,
+        # Legacy fields
+        student_id=current_user.id,
+        query=notif_msg,
+        status="Pending"
+    )
+    db.add(notif)
+    db.commit()
     
     return {
         "id": new_req.id,
@@ -894,6 +905,8 @@ def serialize_event(e: models.Event):
         "team_size": e.team_size,
         "prize_pool": e.prize_pool,
         "speaker": e.speaker,
+        "date": e.start_datetime.strftime("%Y-%m-%d") if e.start_datetime else "",
+        "time": e.start_datetime.strftime("%I:%M %p") if e.start_datetime else "",
         "created_at": e.created_at.isoformat() if e.created_at else None
     }
 

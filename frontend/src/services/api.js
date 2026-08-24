@@ -153,6 +153,46 @@ export const getRegisteredEvents = async () => {
   }
 };
 
+export const getAdminEvents = async () => {
+  try {
+    const response = await API.get("/admin/events");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching admin events:", error);
+    throw error;
+  }
+};
+
+export const createAdminEvent = async (eventData) => {
+  try {
+    const response = await API.post("/admin/events", eventData);
+    return response.data;
+  } catch (error) {
+    console.error("Error creating admin event:", error);
+    throw error;
+  }
+};
+
+export const updateAdminEvent = async (eventId, eventData) => {
+  try {
+    const response = await API.put(`/admin/events/${eventId}`, eventData);
+    return response.data;
+  } catch (error) {
+    console.error("Error updating admin event:", error);
+    throw error;
+  }
+};
+
+export const deleteAdminEvent = async (eventId) => {
+  try {
+    const response = await API.delete(`/admin/events/${eventId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error deleting admin event:", error);
+    throw error;
+  }
+};
+
 // =======================
 // Dashboard & Other
 // =======================
@@ -258,6 +298,66 @@ export const submitGrievance = async (category, description) => {
     return response.data;
   } catch (error) {
     console.error("Error submitting grievance:", error);
+    throw error;
+  }
+};
+
+export const getStudentRequests = async () => {
+  try {
+    const response = await API.get("/student/requests");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching student requests:", error);
+    throw error;
+  }
+};
+
+export const createStudentRequest = async (requestData) => {
+  try {
+    const response = await API.post("/student/requests", requestData);
+    return response.data;
+  } catch (error) {
+    console.error("Error creating student request:", error);
+    throw error;
+  }
+};
+
+export const getStudentRequestHistory = async (requestId) => {
+  try {
+    const response = await API.get(`/student/requests/${requestId}/history`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching request history:", error);
+    throw error;
+  }
+};
+
+export const getAdminRequests = async () => {
+  try {
+    const response = await API.get("/admin/requests");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching admin requests:", error);
+    throw error;
+  }
+};
+
+export const getAdminRequestById = async (requestId) => {
+  try {
+    const response = await API.get(`/admin/requests/${requestId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching admin request by ID:", error);
+    throw error;
+  }
+};
+
+export const updateAdminRequest = async (requestId, requestData) => {
+  try {
+    const response = await API.put(`/admin/requests/${requestId}`, requestData);
+    return response.data;
+  } catch (error) {
+    console.error("Error updating admin request:", error);
     throw error;
   }
 };

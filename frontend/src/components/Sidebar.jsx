@@ -6,7 +6,8 @@ import {
   Building2,
   MessageSquare,
   LogOut,
-  Radio
+  Radio,
+  ClipboardList
 } from "lucide-react";
 import { logout } from "../services/api";
 
@@ -88,13 +89,31 @@ function Sidebar() {
 
           {/* Admin-only Links */}
           {role === "Admin" && (
-            <Link
-              to="/admin-radar"
-              className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
-            >
-              <Radio size={20} className="text-cyan-400" />
-              Complaint Radar
-            </Link>
+            <>
+              <Link
+                to="/admin-radar"
+                className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
+              >
+                <Radio size={20} className="text-cyan-400" />
+                Complaint Radar
+              </Link>
+
+              <Link
+                to="/admin/requests"
+                className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
+              >
+                <ClipboardList size={20} className="text-cyan-400" />
+                Requests Admin
+              </Link>
+
+              <Link
+                to="/admin/events"
+                className="flex items-center gap-3 hover:text-cyan-400 text-slate-300 font-medium transition"
+              >
+                <Calendar size={20} className="text-cyan-400" />
+                Events Admin
+              </Link>
+            </>
           )}
         </nav>
       </div>

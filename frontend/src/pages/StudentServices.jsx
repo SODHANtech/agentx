@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
-import { getAllServices, submitGrievance } from "../services/api";
+import { getAllServices, submitGrievance, createStudentRequest } from "../services/api";
 
 export default function StudentServices() {
   const [activeTab, setActiveTab] = useState("all");
@@ -37,23 +37,24 @@ export default function StudentServices() {
     setActionResult(null);
   }
 
-  function handleModalAction() {
+  async function handleModalAction() {
     if (!actionInput.trim()) return;
 
-    if (selectedService.service === "Library") {
-      setActionResult({
-        type: "success",
-        message: `Book "${actionInput}" is Available in Section B-4. Reserved for 24 hours!`,
+    try {
+      const response = await createStudentRequest({
+        type: selectedService.service,
+        details: actionInput
       });
-    } else if (selectedService.service === "Hostel") {
       setActionResult({
         type: "success",
-        message: `Application submitted for Room Request: ${actionInput}`,
+        message: `Request for "${selectedService.service}" submitted successfully! Request ID: #${response.id}`,
       });
-    } else {
+      setActionInput("");
+    } catch (err) {
+      console.error("Failed to submit request:", err);
       setActionResult({
-        type: "success",
-        message: `Request regarding "${actionInput}" registered with ${selectedService.office}.`,
+        type: "error",
+        message: "Failed to submit request to the server.",
       });
     }
   }
