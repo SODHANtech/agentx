@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from backend.database.session import Base
@@ -53,7 +53,7 @@ class Request(Base):
     __tablename__ = "requests"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     type = Column(String, nullable=False)  # "Bonafide" | "Leave" | "Doubt"
     details = Column(String, nullable=False)
     status = Column(String, default="Pending")  # "Pending" | "Under Review" | "Approved" | "Rejected" | "Completed"
@@ -66,7 +66,7 @@ class RequestHistory(Base):
     __tablename__ = "request_histories"
 
     id = Column(Integer, primary_key=True, index=True)
-    request_id = Column(Integer, ForeignKey("requests.id"), nullable=False)
+    request_id = Column(Integer, ForeignKey("requests.id"), index=True, nullable=False)
     previous_status = Column(String, nullable=True)
     new_status = Column(String, nullable=False)
     changed_by = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -118,10 +118,14 @@ class EventRegistration(Base):
     __tablename__ = "event_registrations"
 
     id = Column(Integer, primary_key=True, index=True)
-    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    event_id = Column(Integer, ForeignKey("events.id"), index=True, nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     registered_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="Registered")  # "Registered" | "Cancelled"
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "student_id", name="uq_event_registration"),
+    )
 
     student = relationship("User", back_populates="registrations")
     event = relationship("Event", back_populates="registrations")
@@ -142,7 +146,7 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    recipient_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     title = Column(String, nullable=False)
     message = Column(String, nullable=False)
     type = Column(String, nullable=False)  # "RequestStatus" | "NewEvent" | "EventUpdate" | "RegistrationClosing" | "Reminder"
@@ -162,7 +166,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    admin_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     action = Column(String, nullable=False)
     module = Column(String, nullable=False)
     target_type = Column(String, nullable=False)
