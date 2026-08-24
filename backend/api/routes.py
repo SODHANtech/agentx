@@ -37,6 +37,7 @@ from backend.agents.student_services_agent import StudentServicesAgent
 from backend.agents.complaint_analyst import ComplaintAnalyst
 
 from backend.services import AuthService, RequestService, EventService, NotificationService
+from backend.core.rate_limit import rate_limit_login, rate_limit_ai, rate_limit_requests, rate_limit_events
 
 router = APIRouter()
 
@@ -54,13 +55,22 @@ complaint_analyst = ComplaintAnalyst()
 # Authentication Dependencies (RBAC)
 # ==========================================
 
-def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)):
-    if not authorization or not authorization.startswith("Bearer "):
+def get_current_user(
+    request: Request,
+    authorization: str = Header(None), 
+    db: Session = Depends(get_db)
+):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    else:
+        token = request.cookies.get("access_token")
+
+    if not token:
         raise HTTPException(
             status_code=401,
-            detail="Missing or invalid authentication token. Prefix token with 'Bearer '."
+            detail="Missing or invalid authentication token."
         )
-    token = authorization.split(" ")[1]
     payload = verify_jwt(token)
     if not payload or not payload.get("sub"):
         raise HTTPException(
@@ -87,7 +97,7 @@ def require_admin(current_user: models.User = Depends(get_current_user)):
 # Auth Endpoints
 # ==========================================
 
-@router.post("/auth/register")
+@router.post("/auth/register", dependencies=[Depends(rate_limit_login)])
 def register(payload: UserRegisterSchema, db: Session = Depends(get_db)):
     existing = AuthService.get_user_by_email(db, payload.email)
     if existing:
@@ -107,8 +117,8 @@ def register(payload: UserRegisterSchema, db: Session = Depends(get_db)):
         }
     }
 
-@router.post("/auth/login")
-def login(payload: UserLoginSchema, db: Session = Depends(get_db)):
+@router.post("/auth/login", dependencies=[Depends(rate_limit_login)])
+def login(response: Response, payload: UserLoginSchema, db: Session = Depends(get_db)):
     user = AuthService.authenticate_user(db, payload)
     if not user:
         raise HTTPException(
@@ -122,6 +132,17 @@ def login(payload: UserLoginSchema, db: Session = Depends(get_db)):
         "role": user.role
     })
     
+    # Set HttpOnly, Secure cookie (Secure is false for local development over HTTP)
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        max_age=86400,
+        expires=86400,
+        samesite="lax",
+        secure=False
+    )
+    
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -134,6 +155,11 @@ def login(payload: UserLoginSchema, db: Session = Depends(get_db)):
             "backlogs": user.backlogs
         }
     }
+
+@router.post("/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(key="access_token")
+    return {"status": "success", "message": "Logged out successfully."}
 
 @router.get("/auth/me")
 def get_me(current_user: models.User = Depends(get_current_user)):
@@ -156,7 +182,7 @@ def home():
     }
 
 
-@router.get("/ask")
+@router.get("/ask", dependencies=[Depends(rate_limit_ai)])
 def ask(
     query: str, 
     session_id: str = "default", 
@@ -764,7 +790,7 @@ def get_student_requests(current_user: models.User = Depends(get_current_user), 
         })
     return results
 
-@router.post("/student/requests")
+@router.post("/student/requests", dependencies=[Depends(rate_limit_requests)])
 def create_student_request(
     payload: StudentRequestCreateSchema,
     current_user: models.User = Depends(get_current_user), 
@@ -970,7 +996,7 @@ def delete_admin_event(
 # Registrations Endpoints
 # ==========================================
 
-@router.post("/events/{event_id}/register")
+@router.post("/events/{event_id}/register", dependencies=[Depends(rate_limit_events)])
 def student_register_event(
     event_id: int,
     current_user: models.User = Depends(get_current_user),
@@ -1009,7 +1035,7 @@ def student_register_event(
     db.commit()
     return {"status": "success", "message": "Successfully registered."}
 
-@router.delete("/events/{event_id}/register")
+@router.delete("/events/{event_id}/register", dependencies=[Depends(rate_limit_events)])
 def student_cancel_event_registration(
     event_id: int,
     current_user: models.User = Depends(get_current_user),
