@@ -132,3 +132,7 @@ class RequestService:
         db.commit()
         db.refresh(notif)
         return r, notif
+
+    @staticmethod
+    def get_request_history(db: Session, request_id: int) -> List[models.RequestHistory]:
+        return db.query(models.RequestHistory).filter(models.RequestHistory.request_id == request_id).order_by(models.RequestHistory.timestamp.asc()).all()

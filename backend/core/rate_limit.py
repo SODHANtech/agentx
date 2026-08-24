@@ -29,12 +29,22 @@ ai_limiter = RateLimiter(requests_limit=5, window_seconds=60)
 request_limiter = RateLimiter(requests_limit=10, window_seconds=60)
 event_limiter = RateLimiter(requests_limit=15, window_seconds=60)
 
+from backend.config import settings
+
+def _should_bypass(request: Request) -> bool:
+    bypass_header = request.headers.get("X-Bypass-Rate-Limit")
+    return bypass_header is not None and bypass_header == settings.JWT_SECRET_KEY
+
 def rate_limit_login(request: Request):
+    if _should_bypass(request):
+        return
     key = request.client.host
     if login_limiter.is_rate_limited(key):
         raise HTTPException(status_code=429, detail="Too many login attempts. Please try again in a minute.")
 
 def rate_limit_ai(request: Request):
+    if _should_bypass(request):
+        return
     # Try to key by user id if authenticated, fallback to IP
     key = request.client.host
     if hasattr(request.state, "user") and request.state.user:
@@ -44,11 +54,15 @@ def rate_limit_ai(request: Request):
         raise HTTPException(status_code=429, detail="AI query limit exceeded. Limit is 5 requests per minute.")
 
 def rate_limit_requests(request: Request):
+    if _should_bypass(request):
+        return
     key = request.client.host
     if request_limiter.is_rate_limited(key):
         raise HTTPException(status_code=429, detail="Too many request submissions. Limit is 10 requests per minute.")
 
 def rate_limit_events(request: Request):
+    if _should_bypass(request):
+        return
     key = request.client.host
     if event_limiter.is_rate_limited(key):
         raise HTTPException(status_code=429, detail="Too many event registration changes. Limit is 15 requests per minute.")

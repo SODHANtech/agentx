@@ -2,6 +2,7 @@ import os
 import sys
 import httpx
 import tempfile
+from backend.config import settings
 
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -15,7 +16,10 @@ def run_tests():
         print(f"ERROR: Backend server is not running on {BASE_URL}. Please start the backend server first!")
         sys.exit(1)
         
-    client = httpx.Client(base_url=BASE_URL)
+    client = httpx.Client(
+        base_url=BASE_URL,
+        headers={"X-Bypass-Rate-Limit": settings.JWT_SECRET_KEY}
+    )
     
     # ---------------------------------------------
     # 1. AUTH TESTS

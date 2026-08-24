@@ -1,11 +1,17 @@
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict
+from sqlalchemy.exc import SQLAlchemyError
 
 from backend.config import settings
 from backend.api.routes import router
 from backend.database.session import engine, Base
 from backend.database import models
+from backend.core.logging_config import setup_logging
+
+# Initialize structured logging
+setup_logging()
 
 # Automatically build schemas on startup
 Base.metadata.create_all(bind=engine)
@@ -16,6 +22,17 @@ app = FastAPI(
     title="Smart Campus AI",
     version="1.0.0"
 )
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    import logging
+    logger = logging.getLogger("campusos")
+    logger.error(f"Database error occurred: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "A database operation error occurred. Please contact the administrator."}
+    )
+
 app.state.start_time = time.time()
 
 # CORS configuration

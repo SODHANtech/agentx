@@ -911,6 +911,14 @@ def update_admin_event(
     admin_user: models.User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
+    if payload.title:
+        existing = db.query(models.Event).filter(
+            models.Event.title.ilike(payload.title),
+            models.Event.id != event_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Another event with title '{payload.title}' already exists.")
+
     event, venue_changed, date_changed, now_published = EventService.update_event(
         db, event_id, payload, admin_user.id
     )
@@ -1140,4 +1148,10 @@ def get_admin_audit_logs(
         "limit": limit,
         "logs": results
     }
+
+@router.get("/test/db-error")
+def test_db_error(db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    db.execute(text("SELECT * FROM non_existent_table_xyz_123"))
+    return {"message": "Should not reach here"}
 
