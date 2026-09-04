@@ -31,10 +31,22 @@ class Settings(BaseSettings):
     mobile_device_ip: str = Field(default="100.64.0.2", description="Mobile node IP on Tailscale VPN mesh")
     mobile_adb_port: int = Field(default=5555, description="Wireless ADB TCP port")
 
-    # Security Settings
+    # Security & Permission Controls
     require_confirmation_for_destruction: bool = Field(
         default=True,
         description="Whether destructive actions (e.g. file deletion) require manual authorization confirmation",
+    )
+    is_ai_enabled: bool = Field(
+        default=True,
+        description="Master permission toggle for local AI engine execution",
+    )
+    is_phone_bridge_allowed: bool = Field(
+        default=False,
+        description="Master permission lock for cross-platform mobile device intent dispatching",
+    )
+    active_theme: str = Field(
+        default="dark",
+        description="Active GUI visual theme: 'dark' or 'light'",
     )
 
     @property

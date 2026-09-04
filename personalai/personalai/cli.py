@@ -164,6 +164,14 @@ def chat(prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Sing
             break
 
 
+@app.command()
+def gui():
+    """Launches modern Fintech Desktop Application GUI."""
+    console.print("[bold cyan]Launching Personal AI Fintech Desktop GUI...[/bold cyan]")
+    from personalai.gui.app import launch_gui
+    launch_gui()
+
+
 async def _run_broker():
     broker = P2PEventBroker()
     await broker.start()
