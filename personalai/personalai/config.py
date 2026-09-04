@@ -9,7 +9,15 @@ class Settings(BaseSettings):
     # Local Inference Settings
     ollama_host: str = Field(default="127.0.0.1", description="Host for local LLM inference engine")
     ollama_port: int = Field(default=11434, description="Port for local LLM inference engine")
-    ollama_model: str = Field(default="llama3.1:8b", description="Local model tag")
+    ollama_model: str = Field(default="llama3.1:8b", description="Default local model tag")
+
+    # Dynamic Multi-Model Router Settings
+    enable_auto_routing: bool = Field(default=True, description="Enables dynamic intent-based model selection")
+    tool_calling_model: str = Field(default="hermes3:8b", description="Model for tool calling & MCP execution")
+    coding_model: str = Field(default="qwen2.5-coder:7b", description="Model for coding & refactoring")
+    reasoning_model: str = Field(default="deepseek-r1:8b", description="Model for deep reasoning & math")
+    vision_model: str = Field(default="llama3.2-vision:11b", description="Model for screenshots & visual QA")
+    general_model: str = Field(default="llama3.1:8b", description="Model for general conversation")
 
     # Storage & Backup Paths
     local_cache_dir: Path = Field(

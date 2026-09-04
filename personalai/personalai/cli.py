@@ -10,7 +10,7 @@ from personalai.config import settings
 from personalai.storage import StorageSyncDaemon
 from personalai.inference import LocalInferenceEngine
 from personalai.rag import LocalVectorStore
-from personalai.orchestration import PersonalAIAgentOrchestrator
+from personalai.orchestration import PersonalAIAgentOrchestrator, ModelRouter
 from personalai.mesh import P2PEventBroker, MobileADBBridge
 
 app = typer.Typer(name="personalai", help="Zero-leak Personal AI System CLI")
@@ -84,6 +84,44 @@ def status():
 
 
 @app.command()
+def router(prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Test prompt intent classification & routing")):
+    """Displays dynamic multi-model router diagnostic status and rules."""
+    console.print(Panel.fit("[bold cyan]Dynamic Multi-Model Router Diagnostics[/bold cyan]"))
+    mr = ModelRouter()
+    installed = mr.get_installed_ollama_models()
+
+    table = Table(title="Model Mapping Rules & Local Status")
+    table.add_column("Intent Domain", style="cyan")
+    table.add_column("Configured Model", style="white")
+    table.add_column("Installed Status", style="bold green")
+
+    mappings = [
+        ("TOOL_CALLING", settings.tool_calling_model),
+        ("CODING", settings.coding_model),
+        ("REASONING", settings.reasoning_model),
+        ("VISION", settings.vision_model),
+        ("GENERAL", settings.general_model),
+    ]
+
+    for intent, model_tag in mappings:
+        is_pulled = any(model_tag in m for m in installed)
+        status_str = "[green]INSTALLED[/green]" if is_pulled else f"[yellow]FALLBACK TO {settings.general_model}[/yellow]"
+        table.add_row(intent, model_tag, status_str)
+
+    console.print(table)
+
+    if prompt:
+        res = mr.select_model(prompt)
+        console.print(f"\n[bold yellow]Prompt Classification Result:[/bold yellow]")
+        console.print(f"Prompt: [italic]'{prompt}'[/italic]")
+        console.print(f"Intent Domain: [bold cyan]{res['intent']}[/bold cyan]")
+        console.print(f"Target Model: [bold white]{res['target_model']}[/bold white]")
+        console.print(f"Selected Model: [bold green]{res['model']}[/bold green]")
+        if res["fallback_used"]:
+            console.print(f"[dim](Fallback used because '{res['target_model']}' is not pulled yet)[/dim]")
+
+
+@app.command()
 def ingest(path: Path = typer.Argument(..., help="Path to markdown/text/pdf file or directory to ingest into local RAG")):
     """Ingests documents (.md, .txt, .pdf) into local ChromaDB RAG vector store."""
     console.print(f"[bold cyan]Ingesting documents from {path}...[/bold cyan]")
@@ -147,7 +185,7 @@ def chat(prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Sing
 
     if prompt:
         res = asyncio.run(orchestrator.execute_query(prompt))
-        console.print(f"\n[bold yellow]AI Response:[/bold yellow]\n{res['response']}")
+        console.print(f"\n[bold yellow]AI Response ({res.get('used_model', 'local')}):[/bold yellow]\n{res['response']}")
         if res.get("citations"):
             console.print(f"\n[bold dim]Citations: {res['citations']}[/bold dim]")
         return
@@ -159,7 +197,7 @@ def chat(prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Sing
             if user_input.strip().lower() in ["exit", "quit"]:
                 break
             res = asyncio.run(orchestrator.execute_query(user_input))
-            console.print(f"\n[bold yellow]Personal AI > [/bold yellow]\n{res['response']}\n")
+            console.print(f"\n[bold yellow]Personal AI ({res.get('used_model', 'local')}) > [/bold yellow]\n{res['response']}\n")
         except (KeyboardInterrupt, EOFError):
             break
 

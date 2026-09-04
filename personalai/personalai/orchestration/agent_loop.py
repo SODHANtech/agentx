@@ -54,6 +54,7 @@ from personalai.config import settings
 from personalai.inference import LocalInferenceEngine
 from personalai.rag import LocalVectorStore
 from personalai.security import SecurityValidator
+from personalai.orchestration.model_router import ModelRouter
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,9 @@ class PersonalAIAgentOrchestrator:
         self.inference_engine = LocalInferenceEngine(model=model)
         self.vector_store = LocalVectorStore()
         self.validator = SecurityValidator()
+        self.router = ModelRouter()
 
-    def build_agent_config(self) -> LocalOpenAIAgentConfig:
+    def build_agent_config(self, target_model: Optional[str] = None) -> LocalOpenAIAgentConfig:
         """Constructs Google Antigravity LocalOpenAIAgentConfig with system instructions."""
         system_instruction = (
             "You are a production-grade, zero-leak personal AI assistant running entirely on local silicon.\n"
@@ -76,12 +78,23 @@ class PersonalAIAgentOrchestrator:
             "3. Format tool calls clearly and accurately.\n"
             "4. Follow security policies when performing system actions."
         )
-        config = self.inference_engine.get_agent_config()
+        engine = LocalInferenceEngine(model=target_model or settings.ollama_model)
+        config = engine.get_agent_config()
         config.system_instruction = system_instruction
         return config
 
-    async def execute_query(self, user_prompt: str, use_rag: bool = True) -> Dict[str, Any]:
-        """Executes a user prompt through local RAG and local model agent loop."""
+    async def execute_query(self, user_prompt: str, use_rag: bool = True, override_model: Optional[str] = None) -> Dict[str, Any]:
+        """Executes a user prompt through local RAG, dynamic model routing, and local model agent loop."""
+        # 1. Dynamic Model Routing
+        if override_model:
+            routing_res = {"intent": "OVERRIDE", "model": override_model, "fallback_used": False}
+        else:
+            routing_res = self.router.select_model(user_prompt)
+
+        selected_model = routing_res["model"]
+        logger.info(f"Model Router selected model '{selected_model}' for intent '{routing_res['intent']}'.")
+
+        # 2. Local RAG Retrieval
         rag_context = ""
         citations = []
 
@@ -95,9 +108,9 @@ class PersonalAIAgentOrchestrator:
         if rag_context:
             full_prompt = f"{rag_context}\n\nUser Request: {user_prompt}"
 
-        config = self.build_agent_config()
+        config = self.build_agent_config(target_model=selected_model)
 
-        # Instantiate Agent (SDK or HTTP Fallback)
+        # 3. Agent Chat Execution
         async with Agent(config=config) as agent:
             response = await agent.chat(full_prompt)
             output_text = str(response)
@@ -106,4 +119,6 @@ class PersonalAIAgentOrchestrator:
             "response": output_text,
             "citations": citations,
             "used_rag": bool(rag_context),
+            "routing": routing_res,
+            "used_model": selected_model,
         }
