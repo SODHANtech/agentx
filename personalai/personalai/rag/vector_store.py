@@ -25,20 +25,42 @@ class LocalVectorStore:
             metadata={"description": "Private personal knowledge embeddings"},
         )
 
-    def ingest_documents(self, documents: List[Dict[str, Any]]) -> int:
-        """Ingests documents into ChromaDB.
-        Each doc dict must contain 'id', 'text', and optional 'metadata' (e.g. source, title, date).
+    def ingest_documents(self, documents: List[Dict[str, Any]], batch_size: int = 100) -> int:
+        """Ingests document chunks into ChromaDB with batch processing.
+        Each doc dict must contain 'id', 'text', and optional 'metadata'.
         """
         if not documents:
             return 0
 
-        ids = [doc["id"] for doc in documents]
-        texts = [doc["text"] for doc in documents]
-        metadatas = [doc.get("metadata", {"source": "local"}) for doc in documents]
+        total_ingested = 0
+        for i in range(0, len(documents), batch_size):
+            batch = documents[i : i + batch_size]
+            ids = [doc["id"] for doc in batch]
+            texts = [doc["text"] for doc in batch]
+            metadatas = [doc.get("metadata", {"source": "local"}) for doc in batch]
 
-        self.collection.upsert(ids=ids, documents=texts, metadatas=metadatas)
-        logger.info(f"Ingested {len(documents)} document chunks into {self.collection_name}")
-        return len(documents)
+            self.collection.upsert(ids=ids, documents=texts, metadatas=metadatas)
+            total_ingested += len(batch)
+
+        logger.info(f"Ingested {total_ingested} document chunks into {self.collection_name}")
+        return total_ingested
+
+    def ingest_directory(
+        self,
+        target_dir: Path,
+        chunk_size: int = 800,
+        chunk_overlap: int = 100,
+        progress_callback: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Scans directory/codebase and ingests all valid files into local ChromaDB RAG store."""
+        from personalai.rag.mass_ingester import MassIngester
+        ingester = MassIngester(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        chunks = ingester.scan_directory(target_dir=target_dir, progress_callback=progress_callback)
+        count = self.ingest_documents(chunks)
+        return {
+            "total_chunks": count,
+            "target_dir": str(target_dir),
+        }
 
     def query_context(self, query_text: str, n_results: int = 3) -> List[Dict[str, Any]]:
         """Queries vector database and returns top relevant chunks with source citations."""
@@ -67,7 +89,12 @@ class LocalVectorStore:
 
         formatted_blocks = ["### Retrieved Knowledge Context:"]
         for idx, item in enumerate(results, start=1):
+            meta = item.get("metadata", {})
             source = item.get("source", f"Doc-{idx}")
-            formatted_blocks.append(f"**[{idx}] Source: `{source}`**\n{item['text']}\n")
+            s_line = meta.get("start_line")
+            e_line = meta.get("end_line")
+            line_str = f" (Lines {s_line}-{e_line})" if s_line and e_line else ""
+            formatted_blocks.append(f"**[{idx}] Source: `{source}`{line_str}**\n{item['text']}\n")
 
         return "\n".join(formatted_blocks)
+

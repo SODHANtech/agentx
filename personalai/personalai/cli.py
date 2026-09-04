@@ -122,25 +122,43 @@ def router(prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Te
 
 
 @app.command()
-def ingest(path: Path = typer.Argument(..., help="Path to markdown/text/pdf file or directory to ingest into local RAG")):
-    """Ingests documents (.md, .txt, .pdf) into local ChromaDB RAG vector store."""
-    console.print(f"[bold cyan]Ingesting documents from {path}...[/bold cyan]")
+def ingest(
+    path: Path = typer.Argument(..., help="Path to file or codebase/document directory to ingest into local RAG"),
+    chunk_size: int = typer.Option(800, "--chunk-size", "-c", help="Target chunk size in characters"),
+    chunk_overlap: int = typer.Option(100, "--chunk-overlap", "-o", help="Target chunk overlap in characters"),
+):
+    """Ingests codebase files (.py, .ts, .java, etc.) and documents (.md, .pdf, .txt, etc.) into local RAG vector store."""
+    console.print(Panel.fit(f"[bold cyan]Mass RAG Ingestion Pipeline[/bold cyan]\nTarget: [bold yellow]{path}[/bold yellow]"))
     store = LocalVectorStore()
     
-    docs = []
-    if path.is_file():
-        text = _read_file_text(path)
-        if text:
-            docs.append({"id": path.name, "text": text, "metadata": {"source": str(path)}})
-    elif path.is_dir():
-        for ext in ["*.md", "*.txt", "*.pdf"]:
-            for file in path.glob(f"**/{ext}"):
-                text = _read_file_text(file)
-                if text:
-                    docs.append({"id": file.name, "text": text, "metadata": {"source": str(file)}})
+    if not path.exists():
+        console.print(f"[bold red]Error: Path '{path}' does not exist.[/bold red]")
+        raise typer.Exit(code=1)
 
-    count = store.ingest_documents(docs)
-    console.print(f"[bold green]Successfully ingested {count} document chunks into local RAG vector store.[/bold green]")
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+    from personalai.rag.mass_ingester import MassIngester
+
+    ingester = MassIngester(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        scan_task = progress.add_task("Scanning & Chunking files...", total=100)
+        
+        def p_callback(filename: str, current: int, total: int):
+            percent = int((current / max(1, total)) * 100)
+            progress.update(scan_task, description=f"Processing [yellow]{filename}[/yellow] ({current}/{total})", completed=percent)
+
+        chunks = ingester.scan_directory(path, progress_callback=p_callback)
+        progress.update(scan_task, description="Upserting chunks to ChromaDB...", completed=100)
+        count = store.ingest_documents(chunks)
+
+    console.print(f"[bold green]Successfully ingested {count} chunks across supported documents & source files into ChromaDB RAG store.[/bold green]")
+
 
 
 @app.command()

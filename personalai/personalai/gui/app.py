@@ -230,14 +230,25 @@ class PersonalAIGUIApp:
 
         self.ingest_btn = tk.Button(
             self.ingest_bar,
-            text="📄 Ingest Document (.md, .txt, .pdf)",
+            text="📄 Ingest File",
             command=self._on_ingest_file,
             font=("Segoe UI", 9, "bold"),
             relief=tk.RAISED,
             padx=8,
             pady=3,
         )
-        self.ingest_btn.pack(side=tk.LEFT)
+        self.ingest_btn.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.ingest_dir_btn = tk.Button(
+            self.ingest_bar,
+            text="📁 Ingest Codebase / Folder",
+            command=self._on_ingest_directory,
+            font=("Segoe UI", 9, "bold"),
+            relief=tk.RAISED,
+            padx=8,
+            pady=3,
+        )
+        self.ingest_dir_btn.pack(side=tk.LEFT)
 
         self.clear_btn = tk.Button(
             self.ingest_bar,
@@ -249,6 +260,7 @@ class PersonalAIGUIApp:
             pady=3,
         )
         self.clear_btn.pack(side=tk.RIGHT)
+
 
         # Chat Text Bubble Display
         self.chat_text = tk.Text(
@@ -296,17 +308,44 @@ class PersonalAIGUIApp:
     def _on_ingest_file(self):
         file_path = filedialog.askopenfilename(
             title="Select Knowledge File to Ingest",
-            filetypes=[("Documents", "*.md *.txt *.pdf"), ("All Files", "*.*")],
+            filetypes=[("Supported Files", "*.md *.txt *.pdf *.py *.js *.ts *.json"), ("All Files", "*.*")],
         )
         if file_path:
             path = Path(file_path)
             store = LocalVectorStore()
-            from personalai.cli import _read_file_text
-            text = _read_file_text(path)
-            if text:
-                store.ingest_documents([{"id": path.name, "text": text, "metadata": {"source": str(path)}}])
-                messagebox.showinfo("Ingestion Success", f"Successfully ingested {path.name} into local RAG vector store!")
-                self._append_system_msg(f"Ingested '{path.name}' into RAG Memory.")
+            from personalai.rag.mass_ingester import MassIngester
+            ingester = MassIngester()
+            content = ingester.read_file_content(path)
+            if content:
+                chunks = ingester.chunk_text(content, path)
+                count = store.ingest_documents(chunks)
+                messagebox.showinfo("Ingestion Success", f"Successfully ingested {count} chunks from {path.name} into RAG store!")
+                self._append_system_msg(f"Ingested '{path.name}' ({count} chunks) into RAG Memory.")
+
+    def _on_ingest_directory(self):
+        dir_path = filedialog.askdirectory(title="Select Codebase or Document Directory to Ingest")
+        if dir_path:
+            target_dir = Path(dir_path)
+            self._append_system_msg(f"Scanning and ingesting codebase/folder: '{target_dir.name}'...")
+            
+            def bg_ingest():
+                try:
+                    store = LocalVectorStore()
+                    res = store.ingest_directory(target_dir)
+                    n_chunks = res["total_chunks"]
+                    self.root.after(0, lambda: messagebox.showinfo(
+                        "Codebase Ingestion Success",
+                        f"Successfully ingested {n_chunks} chunks from '{target_dir.name}' into RAG Store!"
+                    ))
+                    self.root.after(0, lambda: self._append_system_msg(
+                        f"Successfully ingested codebase/folder '{target_dir.name}' ({n_chunks} chunks in RAG)."
+                    ))
+                except Exception as e:
+                    self.root.after(0, lambda: messagebox.showerror("Ingestion Error", f"Failed to ingest folder: {e}"))
+                    self.root.after(0, lambda: self._append_system_msg(f"Error ingesting folder '{target_dir.name}': {e}"))
+
+            threading.Thread(target=bg_ingest, daemon=True).start()
+
 
     def _send_prompt(self):
         prompt = self.prompt_entry.get().strip()
