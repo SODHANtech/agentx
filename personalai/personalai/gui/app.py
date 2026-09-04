@@ -210,8 +210,8 @@ class PersonalAIGUIApp:
         # Flow 2 (Credit -> Local Storage)
         self.chart_canvas.create_line(140, 90, 200, 70, 280, 85, fill=orange, width=4, smooth=True)
 
-        self.chart_canvas.create_text(210, 20, text="Income Flow", fill=text_color, font=("Segoe UI", 8, "bold"))
-        self.chart_canvas.create_text(210, 105, text="Credit Expense", fill=text_color, font=("Segoe UI", 8, "bold"))
+        self.chart_canvas.create_text(210, 20, text="Ingestion Flow", fill=text_color, font=("Segoe UI", 8, "bold"))
+        self.chart_canvas.create_text(210, 105, text="Context Usage", fill=text_color, font=("Segoe UI", 8, "bold"))
 
     def _build_chat_panel(self):
         """Builds Right Panel containing Interactive RAG Chat Display & Document Ingestion Controls."""
