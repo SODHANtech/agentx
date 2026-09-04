@@ -53,7 +53,7 @@ class PersonalAIGUIApp:
         self.main_container.pack(fill=tk.BOTH, expand=True)
 
         # 1. Header Bar
-        self.header_frame = tk.Frame(self.main_container, height=60, padding=10)
+        self.header_frame = tk.Frame(self.main_container, height=60, padx=10, pady=10)
         self.header_frame.pack(fill=tk.X, side=tk.TOP)
 
         self.title_label = tk.Label(
