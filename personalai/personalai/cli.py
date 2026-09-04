@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 from pathlib import Path
 from typing import Optional
 import typer
@@ -14,6 +15,25 @@ from personalai.mesh import P2PEventBroker, MobileADBBridge
 
 app = typer.Typer(name="personalai", help="Zero-leak Personal AI System CLI")
 console = Console()
+
+
+def _read_file_text(file_path: Path) -> str:
+    """Reads text from .txt, .md, .pdf files safely."""
+    if file_path.suffix.lower() == ".pdf":
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(file_path)
+            pages = [page.extract_text() for page in reader.pages if page.extract_text()]
+            return "\n".join(pages)
+        except ImportError:
+            try:
+                import pdfplumber
+                with pdfplumber.open(file_path) as pdf:
+                    pages = [p.extract_text() for p in pdf.pages if p.extract_text()]
+                    return "\n".join(pages)
+            except Exception:
+                return f"[PDF text extraction requires pypdf or pdfplumber: pip install pypdf]"
+    return file_path.read_text(encoding="utf-8", errors="ignore")
 
 
 @app.command()
@@ -64,20 +84,59 @@ def status():
 
 
 @app.command()
-def ingest(path: Path = typer.Argument(..., help="Path to markdown/text file or directory to ingest into local RAG")):
-    """Ingests documents into local ChromaDB RAG vector store."""
+def ingest(path: Path = typer.Argument(..., help="Path to markdown/text/pdf file or directory to ingest into local RAG")):
+    """Ingests documents (.md, .txt, .pdf) into local ChromaDB RAG vector store."""
     console.print(f"[bold cyan]Ingesting documents from {path}...[/bold cyan]")
     store = LocalVectorStore()
     
     docs = []
     if path.is_file():
-        docs.append({"id": path.name, "text": path.read_text(encoding="utf-8"), "metadata": {"source": str(path)}})
+        text = _read_file_text(path)
+        if text:
+            docs.append({"id": path.name, "text": text, "metadata": {"source": str(path)}})
     elif path.is_dir():
-        for file in path.glob("**/*.md"):
-            docs.append({"id": file.name, "text": file.read_text(encoding="utf-8"), "metadata": {"source": str(file)}})
+        for ext in ["*.md", "*.txt", "*.pdf"]:
+            for file in path.glob(f"**/{ext}"):
+                text = _read_file_text(file)
+                if text:
+                    docs.append({"id": file.name, "text": text, "metadata": {"source": str(file)}})
 
     count = store.ingest_documents(docs)
     console.print(f"[bold green]Successfully ingested {count} document chunks into local RAG vector store.[/bold green]")
+
+
+@app.command()
+def clean(
+    reset_rag: bool = typer.Option(False, "--reset-rag", help="Resets local RAG vector database (does not delete source files)"),
+    temp_only: bool = typer.Option(True, "--temp-only", help="Cleans temporary bytecode and cache files safely"),
+):
+    """Safely cleans temporary caches, bytecode, and optional RAG vector indexes without breaking anything."""
+    console.print(Panel.fit("[bold yellow]Personal AI Cache Cleaning[/bold yellow]"))
+    cleaned_count = 0
+
+    # 1. Clean __pycache__ and .pyc
+    for pycache in Path(".").glob("**/__pycache__"):
+        if pycache.is_dir():
+            shutil.rmtree(pycache, ignore_errors=True)
+            cleaned_count += 1
+
+    for pyc in Path(".").glob("**/*.pyc"):
+        if pyc.is_file():
+            pyc.unlink(missing_ok=True)
+            cleaned_count += 1
+
+    console.print(f"[green]Cleaned {cleaned_count} temporary bytecode cache files.[/green]")
+
+    # 2. Reset RAG if requested
+    if reset_rag:
+        store = LocalVectorStore()
+        try:
+            store.client.reset()
+            console.print("[bold green]Local ChromaDB RAG vector store reset successfully.[/bold green]")
+        except Exception as e:
+            console.print(f"[red]Could not reset ChromaDB: {e}[/red]")
+
+    console.print("[bold green]System cache cleanup completed safely![/bold green]")
 
 
 @app.command()
