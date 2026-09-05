@@ -609,7 +609,16 @@ class PersonalAIGUIApp:
 
         # Security Overview Card
         self.sec_card.configure(bg=t["card_surface"], fg=t["text_primary"])
-        self.sec_status_lbl.configure(bg=t["card_surface"], fg=t["text_muted"])
+        self.ai_btn.configure(
+            bg=t["accent_primary"] if settings.is_ai_enabled else t["trace_bg"],
+            fg="#FFFFFF" if settings.is_ai_enabled else t["text_muted"],
+        )
+        self.phone_btn.configure(
+            bg=t["accent_secondary"] if settings.is_phone_bridge_allowed else t["trace_bg"],
+            fg="#FFFFFF" if settings.is_phone_bridge_allowed else t["text_muted"],
+        )
+        self.sec_note.configure(bg=t["card_surface"], fg=t["text_muted"])
+
 
         # Analytics Widget Card
         self.widget_card.configure(bg=t["card_surface"], fg=t["text_primary"])
