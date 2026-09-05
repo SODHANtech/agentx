@@ -33,7 +33,7 @@ except ImportError:
             }
 
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                async with httpx.AsyncClient(timeout=120.0) as client:
                     resp = await client.post(endpoint, json=payload)
                     if resp.status_code == 200:
                         data = resp.json()
@@ -44,9 +44,10 @@ except ImportError:
             except Exception as e:
                 return (
                     f"[Offline Mode] Local inference engine at {self.config.base_url} is unreachable.\n"
-                    f"Please start Ollama in another terminal window (`ollama serve` or `ollama run {self.config.model}`).\n"
+                    f"Please verify Ollama is running (`ollama serve` or `ollama run {self.config.model}`).\n"
                     f"Error details: {e}"
                 )
+
 
     Agent = LocalHTTPContextAgent
 
