@@ -30,8 +30,11 @@ class ModelRouter:
     ]
 
     VISION_KEYWORDS = [
-        r"\bimage\b", r"\bscreenshot\b", r"\bdiagram\b", r"\bphoto\b", r"\bvisual\b", r"\bchart\b"
+        r"\b(photo|image|picture)\s+of\b", r"\bdescribe\s+(the\s+)?(image|photo|picture|screenshot|diagram|chart)\b",
+        r"\banalyze\s+(the\s+)?(image|photo|picture|screenshot)\b", r"\blook\s+at\s+this\s+(image|photo|picture|screenshot)\b",
+        r"\bocr\b", r"\bread\s+text\s+from\s+(image|picture|photo)\b", r"\bscreenshot\b"
     ]
+
 
     def classify_intent(self, prompt: str, has_image: bool = False, requires_tools: bool = False) -> str:
         """Classifies prompt intent domain into CODING, REASONING, TOOL_CALLING, VISION, or GENERAL."""

@@ -42,6 +42,18 @@ class TestModelRouter(unittest.TestCase):
         intent = self.router.classify_intent("Analyze this screenshot image", has_image=True)
         self.assertEqual(intent, "VISION")
 
+    def test_photosynthesis_not_classified_as_vision(self):
+        prompts = [
+            "hello tell me about photo synthesis",
+            "explain photosynthesis in plants",
+            "what is the process of photo synthesis?",
+        ]
+        for p in prompts:
+            intent = self.router.classify_intent(p)
+            self.assertNotEqual(intent, "VISION", f"Prompt '{p}' should not trigger VISION intent")
+            self.assertEqual(intent, "GENERAL", f"Prompt '{p}' should classify as GENERAL")
+
+
     def test_fallback_when_target_model_unpulled(self):
         # Even if intent is CODING (target qwen2.5-coder:7b), if it's not pulled, select_model falls back to general_model
         res = self.router.select_model("Write a python script")
