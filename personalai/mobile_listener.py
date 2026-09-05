@@ -32,35 +32,29 @@ def handle_payload(payload: dict) -> dict:
             except Exception as err:
                 return {"status": "error", "action": action, "error": str(err)}
 
-    # 2. Real Hardware Android Sound & Volume Control
+    # 2. Hardware Android Volume Control via Keyevent Hardware Buttons
     elif action in ["SET_VOLUME", "MUTE", "UNMUTE", "MAX_VOLUME"]:
         target_vol = 0 if action == "MUTE" else (15 if action == "MAX_VOLUME" else (volume if volume is not None else 10))
-        print(f"[+] Setting real Android hardware volume to {target_vol}/15...")
+        print(f"[+] Adjusting Android hardware volume to {target_vol}/15 via Keyevents...")
 
-        # 1. Direct Android System Settings DB Write (MIUI / HyperOS / OneUI / Stock Android)
-        try:
-            subprocess.run(["settings", "put", "system", "volume_music", str(target_vol)], check=False)
-            subprocess.run(["settings", "put", "system", "volume_music_speaker", str(target_vol)], check=False)
-        except Exception:
-            pass
+        if action == "MUTE" or target_vol == 0:
+            # Press Volume Down 15 times
+            for _ in range(15):
+                subprocess.run(["input", "keyevent", "25"], check=False)
+            print("[+] Phone Muted via Keyevent (Vol Down x15)")
+            return {"status": "success", "action": action, "volume": 0}
 
-        # 2. Android AudioService Direct Control (Stream 3 = STREAM_MUSIC)
-        try:
-            subprocess.run(["cmd", "audio", "set-stream-volume", "3", str(target_vol), "0"], check=False)
-        except Exception:
-            pass
+        # Step 1: Zero out volume (Press Vol Down 15 times)
+        for _ in range(15):
+            subprocess.run(["input", "keyevent", "25"], check=False)
 
-        # 3. Android MediaSession Command
-        try:
-            subprocess.run(["cmd", "media_session", "volume", "--stream", "3", "--set", str(target_vol)], check=False)
-        except Exception:
-            pass
+        # Step 2: Press Vol Up target_vol times
+        for _ in range(target_vol):
+            subprocess.run(["input", "keyevent", "24"], check=False)
 
-        # 4. Termux API Multi-Stream Control
+        # Step 3: Try termux-volume as well
         try:
             subprocess.run(["termux-volume", "music", str(target_vol)], check=False)
-            subprocess.run(["termux-volume", "system", str(target_vol)], check=False)
-            subprocess.run(["termux-volume", "notification", str(target_vol)], check=False)
         except Exception:
             pass
 
