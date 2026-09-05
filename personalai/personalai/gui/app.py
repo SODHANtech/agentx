@@ -109,8 +109,10 @@ class SettingsDialog(tk.Toplevel):
         settings.is_phone_bridge_allowed = self.phone_var.get()
         self.app.selected_persona = self.persona_var.get()
 
+        self.app.update_sidebar_sec_buttons()
         self.app.renderer.render_message("System", f"Settings Updated: AI Engine={settings.is_ai_enabled}, Phone Bridge={settings.is_phone_bridge_allowed}, Persona='{self.app.selected_persona}'.", is_user=False)
         self.destroy()
+
 
 
 class PersonalAIGUIApp:
@@ -256,13 +258,40 @@ class PersonalAIGUIApp:
         )
         self.sec_card.pack(fill=tk.X, pady=(0, 10))
 
-        self.sec_status_lbl = tk.Label(
+        # Interactive Security Quick Toggles
+        self.ai_btn = tk.Button(
             self.sec_card,
-            text="• Local AI Engine: ENABLED\n• P2P Phone Bridge: LOCKED",
-            font=("Segoe UI", 9),
+            text="AI Engine: ENABLED" if settings.is_ai_enabled else "AI Engine: DISABLED",
+            command=self._quick_toggle_ai,
+            font=("Segoe UI", 9, "bold"),
+            relief=tk.FLAT,
+            padx=8,
+            pady=3,
+            cursor="hand2",
+        )
+        self.ai_btn.pack(anchor=tk.W, fill=tk.X, pady=3)
+
+        self.phone_btn = tk.Button(
+            self.sec_card,
+            text="Phone Bridge: ALLOWED" if settings.is_phone_bridge_allowed else "Phone Bridge: LOCKED",
+            command=self._quick_toggle_phone,
+            font=("Segoe UI", 9, "bold"),
+            relief=tk.FLAT,
+            padx=8,
+            pady=3,
+            cursor="hand2",
+        )
+        self.phone_btn.pack(anchor=tk.W, fill=tk.X, pady=3)
+
+        self.sec_note = tk.Label(
+            self.sec_card,
+            text="* Click buttons above or ⚙️ Settings to toggle permission locks.",
+            font=("Segoe UI", 8, "italic"),
+            wraplength=280,
             justify=tk.LEFT,
         )
-        self.sec_status_lbl.pack(anchor=tk.W, pady=2)
+        self.sec_note.pack(anchor=tk.W, pady=(4, 0))
+
 
         # Analytics & Context Flow Widget
         self.widget_card = tk.LabelFrame(
@@ -484,6 +513,35 @@ class PersonalAIGUIApp:
         self.ingest_progressbar.stop()
         self.ingest_progress_frame.pack_forget()
 
+    def _quick_toggle_ai(self):
+        settings.is_ai_enabled = not settings.is_ai_enabled
+        status = "ENABLED" if settings.is_ai_enabled else "DISABLED"
+        self.ai_btn.config(
+            text=f"AI Engine: {status}",
+            bg=self.theme["accent_primary"] if settings.is_ai_enabled else self.theme["trace_bg"],
+        )
+        self.renderer.render_message("System", f"Security Update: Local AI Engine is now {status}.", is_user=False)
+
+    def _quick_toggle_phone(self):
+        settings.is_phone_bridge_allowed = not settings.is_phone_bridge_allowed
+        status = "ALLOWED" if settings.is_phone_bridge_allowed else "LOCKED"
+        self.phone_btn.config(
+            text=f"Phone Bridge: {status}",
+            bg=self.theme["accent_secondary"] if settings.is_phone_bridge_allowed else self.theme["trace_bg"],
+        )
+        self.renderer.render_message("System", f"Security Update: P2P Phone Bridge Permission is now {status}.", is_user=False)
+
+    def update_sidebar_sec_buttons(self):
+        """Updates sidebar toggle buttons state."""
+        self.ai_btn.config(
+            text=f"AI Engine: {'ENABLED' if settings.is_ai_enabled else 'DISABLED'}",
+            bg=self.theme["accent_primary"] if settings.is_ai_enabled else self.theme["trace_bg"],
+        )
+        self.phone_btn.config(
+            text=f"Phone Bridge: {'ALLOWED' if settings.is_phone_bridge_allowed else 'LOCKED'}",
+            bg=self.theme["accent_secondary"] if settings.is_phone_bridge_allowed else self.theme["trace_bg"],
+        )
+
     def _send_prompt(self):
         prompt = self.prompt_entry.get().strip()
         if not prompt:
@@ -496,15 +554,26 @@ class PersonalAIGUIApp:
             self.renderer.render_message("Security Gate", "BLOCKED: Local AI Engine is turned OFF in Security Settings.", is_user=False)
             return
 
+        # Show live processing indicator
+        thinking_mark = self.renderer.render_thinking_bubble("Personal AI")
+        self.send_btn.config(state=tk.DISABLED, text="⏳ Thinking...")
+
         def run_in_bg():
             custom_instruction = self.persona_prompts[self.selected_persona]
             config = self.orchestrator.build_agent_config()
             config.system_instruction = custom_instruction
 
             res = asyncio.run(self.orchestrator.execute_query(prompt))
-            self.root.after(0, lambda: self.renderer.render_message("Personal AI", res["response"], citations=res.get("citations"), is_user=False))
+
+            def on_complete():
+                self.renderer.remove_thinking_bubble(thinking_mark)
+                self.renderer.render_message("Personal AI", res["response"], citations=res.get("citations"), is_user=False)
+                self.send_btn.config(state=tk.NORMAL, text="Send Prompt 🚀")
+
+            self.root.after(0, on_complete)
 
         threading.Thread(target=run_in_bg, daemon=True).start()
+
 
     def _clear_chat(self):
         self.chat_text.config(state=tk.NORMAL)

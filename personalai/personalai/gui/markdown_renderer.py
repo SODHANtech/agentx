@@ -40,12 +40,32 @@ class TkinterMarkdownRenderer:
 
         # Speech Bubbles
         w.tag_config("user_header", font=("Segoe UI", 10, "bold"), foreground=t["accent_primary"], spacing1=8)
-        w.tag_config("ai_header", font=("Segoe UI", 10, "bold"), foreground=t["accent_secondary"], spacing1=8)
-        w.tag_config("system_header", font=("Segoe UI", 9, "italic"), foreground=t["text_muted"], spacing1=4)
+        w.tag_config("thinking_tag", font=("Segoe UI", 9, "italic"), foreground=t["accent_secondary"], spacing1=4, spacing3=4)
 
     def update_theme(self, theme: Dict[str, Any]):
         self.theme = theme
         self._configure_tags()
+
+    def render_thinking_bubble(self, sender: str = "Personal AI") -> str:
+        """Appends a temporary thinking indicator bubble to show active processing."""
+        w = self.text_widget
+        w.config(state=tk.NORMAL)
+        start_mark = w.index(tk.END + "-1c")
+        w.insert(tk.END, f"\n🤖 {sender}\n", "ai_header")
+        w.insert(tk.END, "⏳ Thinking... Running RAG search & local AI model inference...\n", "thinking_tag")
+        w.config(state=tk.DISABLED)
+        w.see(tk.END)
+        return start_mark
+
+    def remove_thinking_bubble(self, start_mark: str):
+        """Removes the temporary thinking indicator bubble."""
+        w = self.text_widget
+        w.config(state=tk.NORMAL)
+        try:
+            w.delete(start_mark, tk.END)
+        except Exception:
+            pass
+        w.config(state=tk.DISABLED)
 
     def render_message(self, sender: str, text: str, citations: Optional[List[str]] = None, is_user: bool = False):
         """Appends a styled speech bubble with Markdown parsing and collapsible RAG trace accordions."""
@@ -59,6 +79,7 @@ class TkinterMarkdownRenderer:
             w.insert(tk.END, f"\n⚙️ {sender}\n", "system_header")
         else:
             w.insert(tk.END, f"\n🤖 {sender}\n", "ai_header")
+
 
         # 2. Extract and format collapsible RAG citations trace if present
         cleaned_text = text
