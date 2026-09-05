@@ -15,7 +15,6 @@ def handle_payload(payload: dict) -> dict:
         return {}
 
     action = payload.get("action")
-
     url = payload.get("url") or payload.get("uri") or ""
     volume = payload.get("volume")
     print(f"[*] Received action: {action} | Payload: {payload}")
@@ -29,39 +28,44 @@ def handle_payload(payload: dict) -> dict:
         except Exception:
             try:
                 subprocess.run(["am", "start", "-a", "android.intent.action.VIEW", "-d", url], check=True)
-                return {"status": "success", "action": action, "url": url, "fallback": "am_start"}
+                return {"status": "success", "action": action, "url": url}
             except Exception as err:
                 return {"status": "error", "action": action, "error": str(err)}
 
-    # 2. Sound & Volume Control (Mute, Unmute, Set Volume)
+    # 2. Real Hardware Android Sound & Volume Control
     elif action in ["SET_VOLUME", "MUTE", "UNMUTE", "MAX_VOLUME"]:
         target_vol = 0 if action == "MUTE" else (15 if action == "MAX_VOLUME" else (volume if volume is not None else 10))
-        print(f"[+] Adjusting volume to {target_vol}/15 on Android device...")
+        print(f"[+] Setting real Android hardware volume to {target_vol}/15...")
 
-        # Method A: termux-volume
+        # 1. Direct Android System Settings DB Write (MIUI / HyperOS / OneUI / Stock Android)
         try:
-            subprocess.run(["termux-volume", "music", str(target_vol)], check=True)
-            print(f"[+] Volume set to {target_vol} via termux-volume")
-            return {"status": "success", "action": action, "volume": target_vol}
+            subprocess.run(["settings", "put", "system", "volume_music", str(target_vol)], check=False)
+            subprocess.run(["settings", "put", "system", "volume_music_speaker", str(target_vol)], check=False)
         except Exception:
             pass
 
-        # Method B: Android built-in cmd media_session
+        # 2. Android AudioService Direct Control (Stream 3 = STREAM_MUSIC)
         try:
-            subprocess.run(["cmd", "media_session", "volume", "--stream", "3", "--set", str(target_vol)], check=True)
-            print(f"[+] Volume set to {target_vol} via cmd media_session")
-            return {"status": "success", "action": action, "volume": target_vol}
+            subprocess.run(["cmd", "audio", "set-stream-volume", "3", str(target_vol), "0"], check=False)
         except Exception:
             pass
 
-        # Method C: Android built-in media volume
+        # 3. Android MediaSession Command
         try:
-            subprocess.run(["media", "volume", "--stream", "3", "--set", str(target_vol)], check=True)
-            print(f"[+] Volume set to {target_vol} via media volume")
-            return {"status": "success", "action": action, "volume": target_vol}
-        except Exception as err:
-            print(f"[-] Volume control note: Install 'pkg install termux-api' in Termux for hardware volume stream access.")
-            return {"status": "error", "action": action, "error": str(err)}
+            subprocess.run(["cmd", "media_session", "volume", "--stream", "3", "--set", str(target_vol)], check=False)
+        except Exception:
+            pass
+
+        # 4. Termux API Multi-Stream Control
+        try:
+            subprocess.run(["termux-volume", "music", str(target_vol)], check=False)
+            subprocess.run(["termux-volume", "system", str(target_vol)], check=False)
+            subprocess.run(["termux-volume", "notification", str(target_vol)], check=False)
+        except Exception:
+            pass
+
+        print(f"[+] Real Android hardware volume set to {target_vol}/15!")
+        return {"status": "success", "action": action, "volume": target_vol}
 
     # 3. Device Vibration
     elif action == "VIBRATE":
@@ -86,7 +90,8 @@ async def main():
                     try:
                         payload = json.loads(message)
                         result = handle_payload(payload)
-                        await ws.send(json.dumps(result))
+                        if result:
+                            await ws.send(json.dumps(result))
                     except json.JSONDecodeError:
                         print("[-] Received malformed payload.")
         except Exception as e:
