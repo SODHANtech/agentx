@@ -32,16 +32,37 @@ def handle_payload(payload: dict) -> dict:
     # 2. Sound & Volume Control (Mute, Unmute, Set Volume)
     elif action in ["SET_VOLUME", "MUTE", "UNMUTE", "MAX_VOLUME"]:
         target_vol = 0 if action == "MUTE" else (15 if action == "MAX_VOLUME" else (volume if volume is not None else 10))
+        print(f"[+] Adjusting volume to {target_vol}/15 on Android device...")
+
+        # Method A: termux-volume
         try:
-            # Termux volume stream control
             subprocess.run(["termux-volume", "music", str(target_vol)], check=True)
+            print(f"[+] Volume set to {target_vol} via termux-volume")
             return {"status": "success", "action": action, "volume": target_vol}
-        except Exception as e:
-            return {"status": "error", "action": action, "error": f"Requires termux-api pkg: {e}"}
+        except Exception:
+            pass
+
+        # Method B: Android built-in cmd media_session
+        try:
+            subprocess.run(["cmd", "media_session", "volume", "--stream", "3", "--set", str(target_vol)], check=True)
+            print(f"[+] Volume set to {target_vol} via cmd media_session")
+            return {"status": "success", "action": action, "volume": target_vol}
+        except Exception:
+            pass
+
+        # Method C: Android built-in media volume
+        try:
+            subprocess.run(["media", "volume", "--stream", "3", "--set", str(target_vol)], check=True)
+            print(f"[+] Volume set to {target_vol} via media volume")
+            return {"status": "success", "action": action, "volume": target_vol}
+        except Exception as err:
+            print(f"[-] Volume control note: Install 'pkg install termux-api' in Termux for hardware volume stream access.")
+            return {"status": "error", "action": action, "error": str(err)}
 
     # 3. Device Vibration
     elif action == "VIBRATE":
         duration = payload.get("duration", 500)
+        print(f"[+] Triggering device vibration for {duration}ms...")
         try:
             subprocess.run(["termux-vibrate", "-d", str(duration)], check=True)
             return {"status": "success", "action": action}
