@@ -97,8 +97,10 @@ class PersonalAIAgentOrchestrator:
             )
 
         try:
-            url = f"ws://{settings.mesh_host}:{settings.mesh_port}"
+            client_host = "127.0.0.1" if settings.mesh_host in ("0.0.0.0", "") else settings.mesh_host
+            url = f"ws://{client_host}:{settings.mesh_port}"
             async with websockets.connect(url, open_timeout=3.0) as ws:
+
 
                 await ws.send(json.dumps(payload))
                 action = payload.get("action")
