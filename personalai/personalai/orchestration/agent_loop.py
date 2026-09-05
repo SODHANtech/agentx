@@ -1,6 +1,10 @@
 import logging
 import httpx
+import re
+import json
+import websockets
 from typing import AsyncGenerator, Dict, Any, Optional
+
 
 try:
     from google.antigravity import Agent, LocalOpenAIAgentConfig
@@ -84,8 +88,67 @@ class PersonalAIAgentOrchestrator:
         config.system_instruction = system_instruction
         return config
 
+    async def _dispatch_phone_payload(self, payload: Dict[str, Any]) -> str:
+        """Dispatches an action payload over local P2P Mesh Broker (port 8765) to connected Termux mobile node."""
+        if not settings.is_phone_bridge_allowed:
+            return (
+                "🔒 **Action Blocked**: P2P Phone Bridge Permission is currently **LOCKED** in Security Controls.\n\n"
+                "Please click **`[ Phone Bridge: LOCKED ]`** in the Desktop GUI sidebar or Settings ⚙️ modal to allow phone actions."
+            )
+
+        try:
+            url = f"ws://{settings.mesh_host}:{settings.mesh_port}"
+            async with websockets.connect(url, timeout=3.0) as ws:
+                await ws.send(json.dumps(payload))
+                action = payload.get("action")
+                target = payload.get("url") or payload.get("volume") or "device"
+                return (
+                    f"📱 **Phone Intent Dispatched & Executed!**\n"
+                    f"- **Action**: `{action}`\n"
+                    f"- **Target**: `{target}`\n"
+                    f"- **Status**: Sent to connected Termux mobile node via local P2P Mesh Network."
+                )
+        except Exception as e:
+            return (
+                f"⚠️ **Phone Bridge Connection Warning**: P2P Phone Bridge is **ALLOWED**, but could not connect to local Mesh Broker on port {settings.mesh_port}.\n"
+                f"Make sure `python -m personalai.cli mesh-start` is running on your laptop! (Error: {e})"
+            )
+
     async def execute_query(self, user_prompt: str, use_rag: bool = True, override_model: Optional[str] = None) -> Dict[str, Any]:
         """Executes a user prompt through local RAG, dynamic model routing, and local model agent loop."""
+        prompt_lower = user_prompt.lower()
+
+        # 0. Check for Phone Action Intents (URL / Volume / Vibration)
+        url_match = re.search(r"https?://[^\s\"\']+", user_prompt)
+        is_phone_target = "phone" in prompt_lower or "mobile" in prompt_lower or "android" in prompt_lower
+
+        if is_phone_target:
+            if url_match or "open" in prompt_lower or "youtube" in prompt_lower or "video" in prompt_lower:
+                target_url = url_match.group(0) if url_match else "https://youtube.com"
+                payload = {"action": "OPEN_URL", "url": target_url}
+                dispatch_res = await self._dispatch_phone_payload(payload)
+                return {
+                    "response": dispatch_res,
+                    "citations": [],
+                    "used_rag": False,
+                    "routing": {"intent": "TOOL_CALLING", "model": settings.tool_calling_model},
+                    "used_model": "PhoneBridgeDispatch",
+                }
+
+            elif "volume" in prompt_lower or "mute" in prompt_lower or "vibrate" in prompt_lower:
+                vol_match = re.search(r"\b(\d{1,2})\b", user_prompt)
+                vol_val = int(vol_match.group(1)) if vol_match else 10
+                action_type = "MUTE" if "mute" in prompt_lower else ("VIBRATE" if "vibrate" in prompt_lower else "SET_VOLUME")
+                payload = {"action": action_type, "volume": vol_val}
+                dispatch_res = await self._dispatch_phone_payload(payload)
+                return {
+                    "response": dispatch_res,
+                    "citations": [],
+                    "used_rag": False,
+                    "routing": {"intent": "TOOL_CALLING", "model": settings.tool_calling_model},
+                    "used_model": "PhoneBridgeDispatch",
+                }
+
         # 1. Dynamic Model Routing
         if override_model:
             routing_res = {"intent": "OVERRIDE", "model": override_model, "fallback_used": False}
@@ -123,3 +186,4 @@ class PersonalAIAgentOrchestrator:
             "routing": routing_res,
             "used_model": selected_model,
         }
+
