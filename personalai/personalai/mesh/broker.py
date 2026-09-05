@@ -33,8 +33,12 @@ class P2PEventBroker:
                 try:
                     payload = json.loads(message)
                     logger.info(f"Received P2P Mesh payload: {payload}")
-                    await self.broadcast(payload, sender=websocket)
+                    if "status" in payload:
+                        logger.info("Received execution result ACK. Not re-broadcasting.")
+                    else:
+                        await self.broadcast(payload, sender=websocket)
                 except json.JSONDecodeError:
+
                     logger.error("Received malformed non-JSON message over mesh.")
         except Exception:
             pass

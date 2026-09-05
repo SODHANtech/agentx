@@ -11,7 +11,11 @@ BROKER_URL = f"ws://{LAPTOP_IP}:{PORT}"
 
 def handle_payload(payload: dict) -> dict:
     """Handles incoming action payloads from the laptop orchestrator."""
+    if "status" in payload:
+        return {}
+
     action = payload.get("action")
+
     url = payload.get("url") or payload.get("uri") or ""
     volume = payload.get("volume")
     print(f"[*] Received action: {action} | Payload: {payload}")
