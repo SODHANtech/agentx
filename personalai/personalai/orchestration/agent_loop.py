@@ -92,27 +92,29 @@ class PersonalAIAgentOrchestrator:
         """Dispatches an action payload over local P2P Mesh Broker (port 8765) to connected Termux mobile node."""
         if not settings.is_phone_bridge_allowed:
             return (
-                "🔒 **Action Blocked**: P2P Phone Bridge Permission is currently **LOCKED** in Security Controls.\n\n"
-                "Please click **`[ Phone Bridge: LOCKED ]`** in the Desktop GUI sidebar or Settings ⚙️ modal to allow phone actions."
+                "[SECURITY LOCK] Action Blocked: P2P Phone Bridge Permission is currently LOCKED in Security Controls.\n\n"
+                "Please click [ Phone Bridge: LOCKED ] in the Desktop GUI sidebar or Settings modal to allow phone actions."
             )
 
         try:
             url = f"ws://{settings.mesh_host}:{settings.mesh_port}"
-            async with websockets.connect(url, timeout=3.0) as ws:
+            async with websockets.connect(url, open_timeout=3.0) as ws:
+
                 await ws.send(json.dumps(payload))
                 action = payload.get("action")
                 target = payload.get("url") or payload.get("volume") or "device"
                 return (
-                    f"📱 **Phone Intent Dispatched & Executed!**\n"
-                    f"- **Action**: `{action}`\n"
-                    f"- **Target**: `{target}`\n"
-                    f"- **Status**: Sent to connected Termux mobile node via local P2P Mesh Network."
+                    f"[PHONE DISPATCH] Phone Intent Dispatched & Executed!\n"
+                    f"- Action: `{action}`\n"
+                    f"- Target: `{target}`\n"
+                    f"- Status: Sent to connected Termux mobile node via local P2P Mesh Network."
                 )
         except Exception as e:
             return (
-                f"⚠️ **Phone Bridge Connection Warning**: P2P Phone Bridge is **ALLOWED**, but could not connect to local Mesh Broker on port {settings.mesh_port}.\n"
+                f"[CONNECTION WARNING] Phone Bridge is ALLOWED, but could not connect to local Mesh Broker on port {settings.mesh_port}.\n"
                 f"Make sure `python -m personalai.cli mesh-start` is running on your laptop! (Error: {e})"
             )
+
 
     async def execute_query(self, user_prompt: str, use_rag: bool = True, override_model: Optional[str] = None) -> Dict[str, Any]:
         """Executes a user prompt through local RAG, dynamic model routing, and local model agent loop."""
