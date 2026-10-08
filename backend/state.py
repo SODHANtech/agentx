@@ -11,12 +11,20 @@ class AgentStep(TypedDict):
 # Custom reducer to append new agent steps to the existing execution log list
 def add_agent_steps(left: List[AgentStep], right: Optional[List[AgentStep]]) -> List[AgentStep]:
     if not right:
-        return left
-    # Merge and update step list preserving unique step IDs
-    merged = {step["id"]: step for step in (left + right)}
+        return left or []
+    # If a reset signal is present, discard historical turn steps
+    if any(step.get("_reset") for step in right):
+        cleaned = [{k: v for k, v in step.items() if k != "_reset"} for step in right]
+        merged = {step["id"]: step for step in cleaned}
+        return list(merged.values())
+    merged = {step["id"]: step for step in (left or []) + right}
     return list(merged.values())
 
 def merge_dict(left: Optional[dict], right: Optional[dict]) -> dict:
+    if right is not None and right.get("_reset") is True:
+        clean = dict(right)
+        clean.pop("_reset", None)
+        return clean
     res = dict(left or {})
     if right:
         res.update(right)

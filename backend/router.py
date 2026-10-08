@@ -37,7 +37,7 @@ Available Agents:
 
 Current Reference Date Context: Sunday, August 23, 2026. Use this to resolve relative days (e.g. "tomorrow" -> "Monday", "today" -> "Sunday", "day after tomorrow" -> "Tuesday").
 
-Return ONLY a valid JSON object matching the following structure (do NOT wrap in markdown block, do NOT include any other text):
+Return ONLY a valid JSON object matching the following structure:
 {
     "agents": ["AgentName1", "AgentName2"],
     "parameters": {
@@ -65,151 +65,120 @@ VALID_AGENTS = {
 
 def deterministic_route(query: str) -> dict:
     """
-    Level 1 — Deterministic Regex Router.
-    Parses common campus keywords locally to bypass LLM and function when unconfigured.
+    Multi-Intent Deterministic Router & Entity Extractor.
+    Extracts all matching agents and parameters from campus queries.
     """
     q_lower = query.lower()
-    
-    # 1. Placement Agent
-    if any(k in q_lower for k in ["placement", "eligible", "eligibility", "cgpa", "backlog", "google", "microsoft", "amazon", "infosys", "tcs"]):
-        company = None
-        for c in ["Google", "Microsoft", "Amazon", "Infosys", "TCS"]:
-            if c.lower() in q_lower:
-                company = c
-                break
-        return {
-            "agents": ["PlacementAgent"],
-            "parameters": {"day": None, "company": company}
-        }
-        
-    # 2. Academic Agent
-    if any(k in q_lower for k in ["timetable", "class", "schedule", "lecture", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tomorrow", "today", "quiz", "practice", "chapter"]):
-        day = None
+    matched_agents = []
+    params = {"day": None, "company": None}
+
+    # 1. Academic Agent (Timetable, schedule, classes, days of week)
+    if any(k in q_lower for k in [
+        "timetable", "class", "classes", "schedule", "lecture", "lectures",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "tomorrow", "today", "quiz", "practice", "syllabus"
+    ]):
+        matched_agents.append("AcademicAgent")
         if "tomorrow" in q_lower:
-            day = "Monday"
+            params["day"] = "Monday"
         elif "today" in q_lower:
-            day = "Sunday"
+            params["day"] = "Sunday"
         else:
             for d in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]:
                 if d.lower() in q_lower:
-                    day = d
+                    params["day"] = d
                     break
-        return {
-            "agents": ["AcademicAgent"],
-            "parameters": {"day": day, "company": None}
-        }
-        
+
+    # 2. Placement Agent (Eligibility, companies, job drives)
+    if any(k in q_lower for k in [
+        "placement", "placements", "eligible", "eligibility", "cgpa", "backlog", "backlogs",
+        "google", "microsoft", "amazon", "infosys", "tcs"
+    ]):
+        matched_agents.append("PlacementAgent")
+        for c in ["Google", "Microsoft", "Amazon", "Infosys", "TCS"]:
+            if c.lower() in q_lower:
+                params["company"] = c
+                break
+
     # 3. Events Agent
-    if any(k in q_lower for k in ["event", "register", "cancel", "export", "hackathon", "seminar"]):
-        return {
-            "agents": ["EventsAgent"],
-            "parameters": {"day": None, "company": None}
-        }
+    if any(k in q_lower for k in ["event", "events", "hackathon", "seminar", "workshop", "fest"]):
+        matched_agents.append("EventsAgent")
 
     # 4. Student Services Agent
-    if any(k in q_lower for k in ["hostel", "library", "transport", "bus", "complaint", "grievance", "scholarship"]):
-        return {
-            "agents": ["StudentServicesAgent"],
-            "parameters": {"day": None, "company": None}
-        }
+    if any(k in q_lower for k in ["hostel", "library", "transport", "bus", "complaint", "grievance", "scholarship", "scholarships"]):
+        matched_agents.append("StudentServicesAgent")
 
     # 5. Resume Agent
-    if any(k in q_lower for k in ["resume", "cv", "portfolio", "ats"]):
+    if any(k in q_lower for k in ["resume", "cv", "portfolio", "ats score"]):
+        matched_agents.append("ResumeAgent")
+
+    # 6. Communication Agent
+    if any(k in q_lower for k in ["draft email", "draft mail", "schedule appointment", "book appointment", "announcement"]):
+        matched_agents.append("CommunicationAgent")
+
+    # 7. Knowledge Agent (Handbook, attendance policy, exams)
+    if any(k in q_lower for k in ["rule", "rules", "policy", "handbook", "attendance criteria", "grading", "exam rules"]):
+        matched_agents.append("KnowledgeAgent")
+
+    # 8. Notification Agent
+    if any(k in q_lower for k in ["remind me", "set reminder", "alert me"]):
+        matched_agents.append("NotificationAgent")
+
+    if matched_agents:
+        # Preserve uniqueness while maintaining order
+        unique_agents = list(dict.fromkeys(matched_agents))
         return {
-            "agents": ["ResumeAgent"],
-            "parameters": {"day": None, "company": None}
-        }
-        
-    # 6. Notification Agent
-    if any(k in q_lower for k in ["remind", "alert", "notification"]):
-        return {
-            "agents": ["NotificationAgent"],
-            "parameters": {"day": None, "company": None}
-        }
-        
-    # 7. Knowledge Agent
-    if any(k in q_lower for k in ["rule", "policy", "handbook", "attendance", "grading", "pass"]):
-        return {
-            "agents": ["KnowledgeAgent"],
-            "parameters": {"day": None, "company": None}
+            "agents": unique_agents,
+            "parameters": params
         }
 
-    return None
+    return {"agents": [], "parameters": params}
+
 
 def route(query: str) -> dict:
-    # LEVEL 1: Deterministic routing check
+    """
+    Intelligent Router:
+    1. Attempts Groq LLM structured extraction first.
+    2. Falls back to multi-intent deterministic router if Groq API key is offline or invalid.
+    """
     current_question = query
     if "Current User Question:" in query:
         current_question = query.split("Current User Question:")[-1].strip()
 
-    det_res = deterministic_route(current_question)
-    if det_res:
-        print("========== LEVEL 1: DETERMINISTIC ROUTER ==========")
-        print("Query :", current_question.strip())
-        print("Agents:", det_res["agents"])
-        print("Params:", det_res["parameters"])
-        print("====================================================")
-        return det_res
-
-    # LEVEL 2: Fallback LLM routing check
+    # Try Groq LLM first
     try:
         prompt = ChatPromptTemplate.from_messages([
             ("system", SYSTEM_PROMPT),
             ("user", "{query}")
         ])
-        
         structured_llm = llm.with_structured_output(RoutingResult)
         chain = prompt | structured_llm
         result = chain.invoke({"query": query})
-        
-        # Filter and validate active agents
-        agents = [
-            agent
-            for agent in result.agents
-            if agent in VALID_AGENTS
-        ]
+
+        agents = [agent for agent in result.agents if agent in VALID_AGENTS]
         agents = list(dict.fromkeys(agents))
-        
+
         valid_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
-        valid_companies = {"Google", "Microsoft", "Amazon", "Infosys", "TCS"}
-        
         day = result.day
         if day and day.title() in valid_days:
             day = day.title()
         else:
             day = None
-            
+
         company = result.company
-        if company:
-            matched_company = next(
-                (c for c in valid_companies if c.lower() == company.lower()), 
-                None
-            )
-            company = matched_company
+        if company and company.title() in {"Google", "Microsoft", "Amazon", "Infosys", "TCS"}:
+            company = company.title()
         else:
             company = None
 
-        parameters = {
-            "day": day,
-            "company": company
-        }
-
-        print("========== LEVEL 2: LLM ROUTER (STRUCTURED) ==========")
-        print("Query :", query.strip())
-        print("Agents:", agents)
-        print("Params:", parameters)
-        print("======================================================")
-
+        print(f"[Router: Groq LLM] Matched Agents: {agents}, Params: day={day}, company={company}")
         return {
             "agents": agents,
-            "parameters": parameters
+            "parameters": {"day": day, "company": company}
         }
 
-    except Exception as e:
-        print("========== ROUTER ERROR ==========")
-        print(e)
-        print("==================================")
-        return {
-            "agents": [],
-            "parameters": {"day": None, "company": None}
-        }
+    except Exception as llm_err:
+        # Graceful fallback to deterministic multi-intent router
+        det_res = deterministic_route(current_question)
+        print(f"[Router: Fallback] (LLM offline: {llm_err.__class__.__name__}) Matched Agents: {det_res['agents']}, Params: {det_res['parameters']}")
+        return det_res

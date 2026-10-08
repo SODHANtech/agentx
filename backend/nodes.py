@@ -56,6 +56,7 @@ Current User Question:
 
     steps = [
         {
+            "_reset": True,
             "id": "supervisor",
             "name": "Supervisor Agent",
             "status": "completed",
@@ -66,7 +67,7 @@ Current User Question:
     return {
         "pending_agents": list(agents),
         "params": params,
-        "agent_outputs": {},
+        "agent_outputs": {"_reset": True},
         "agent_steps": steps
     }
 
@@ -492,14 +493,110 @@ Return ONLY a valid JSON object matching the following structure:
     }
 
 
+def synthesize_conversational_response(outputs: dict, query: str, user_profile: Optional[User] = None) -> str:
+    """Synthesizes human-like, intelligent responses from retrieved campus agent data."""
+    # 1. Attempt Groq LLM synthesis if API key is active
+    try:
+        from backend.llm import llm
+        prompt = f"""You are Smart Campus AI, a polite, intelligent university assistant.
+User Query: {query}
+
+Retrieved Campus Systems Data:
+{json.dumps(outputs, indent=2)}
+
+Please write a natural, coherent, conversational response in markdown answering the user query based on the retrieved data. Use clean formatting and bullet points where helpful. Do NOT output raw JSON."""
+        res = llm.invoke(prompt)
+        if res and res.content and len(res.content.strip()) > 10:
+            return res.content.strip()
+    except Exception:
+        pass
+
+    # 2. High-fidelity conversational synthesis fallback
+    sections = []
+    student_name = user_profile.name if user_profile else "Student"
+
+    if "academic" in outputs:
+        classes = outputs["academic"]
+        if isinstance(classes, list) and classes:
+            day = classes[0].get("day", "Today")
+            class_lines = "\n".join([f"  • **{c['subject']}** at {c['time']}" for c in classes])
+            sections.append(f"📅 **Your Schedule for {day}:**\n{class_lines}")
+        elif isinstance(classes, dict):
+            sections.append(f"📅 **Academic Timetable:** {classes.get('message', 'No scheduled classes found.')}")
+
+    if "academic_quiz" in outputs:
+        quiz_data = outputs["academic_quiz"]
+        sections.append(f"📝 **Practice Quiz:**\n{quiz_data.get('explanation', '')}")
+
+    if "placement" in outputs:
+        p = outputs["placement"]
+        if "status" in p:
+            company = p.get("company", "Company")
+            status = p.get("status")
+            status_badge = "✅ **Eligible**" if status == "Eligible" else "❌ **Not Eligible**"
+            details = p.get("details", "")
+            sections.append(f"💼 **Placement Eligibility ({company}):**\nStatus: {status_badge}\nProfile: CGPA {user_profile.cgpa if user_profile else 8.2} | {user_profile.backlogs if user_profile else 0} Backlogs\nDetails: {details}")
+        elif "message" in p:
+            sections.append(f"💼 **Placement:** {p['message']}")
+
+    if "knowledge" in outputs:
+        ans = outputs["knowledge"].get("answer", "")
+        if ans:
+            sections.append(f"📖 **Campus Handbook & Guidelines:**\n{ans}")
+
+    if "events" in outputs:
+        evts = outputs["events"]
+        if isinstance(evts, list) and evts:
+            ev_lines = "\n".join([f"  • **{e['title']}** on {e.get('date', 'TBD')} ({e.get('venue', 'Campus')})" for e in evts])
+            sections.append(f"🎉 **Upcoming Events:**\n{ev_lines}")
+        else:
+            sections.append("🎉 **Events:** No matching campus events found.")
+
+    if "notification" in outputs:
+        sections.append(f"🔔 **Reminder:** {outputs['notification'].get('message', '')}")
+
+    if "student_services" in outputs:
+        srvs = outputs["student_services"]
+        if isinstance(srvs, list) and srvs:
+            srv_lines = "\n".join([f"  • **{s['service']}**: {s.get('description', '')} ({s.get('office', '')})" for s in srvs])
+            sections.append(f"🏫 **Student Services:**\n{srv_lines}")
+        elif isinstance(srvs, dict):
+            sections.append(f"🏫 **Student Services:** {srvs.get('message', '')}")
+
+    if "response" in outputs:
+        sections.append(outputs["response"])
+
+    if not sections:
+        return f"Hello {student_name}! I received your query. How else can I assist you with your campus classes, placements, or services today?"
+
+    return "\n\n".join(sections)
+
+
 def response_node(state: AgentState) -> Dict[str, Any]:
     outputs = state.get("agent_outputs", {})
+    messages = state.get("messages", [])
+    query = messages[-1].content if messages else ""
+    student_id = state.get("student_id")
+
+    db = SessionLocal()
+    user_profile = None
+    try:
+        if student_id:
+            user_profile = db.query(User).filter(User.id == student_id).first()
+    except Exception as e:
+        print(f"Error fetching user profile in response_node: {e}")
+    finally:
+        db.close()
+
+    synthesized_text = synthesize_conversational_response(outputs, query, user_profile)
+    outputs["response"] = synthesized_text
+
     steps = [
         {
             "id": "response",
             "name": "Response Agent",
             "status": "completed",
-            "detail": "Formatting final structured output"
+            "detail": "Synthesized unified campus intelligence response"
         }
     ]
 

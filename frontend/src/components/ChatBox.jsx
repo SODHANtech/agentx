@@ -52,12 +52,11 @@ function ChatBox({ runWorkflow, initialPrompt }) {
       if (file) {
         response = await analyzeResume(file);
       } else {
-        // Call backend API
-        response = await askAI(text);
-
-        // Update active agent timeline in right sidebar
+        // Call backend API with real-time SSE streaming or fallback
         if (runWorkflow) {
-          await runWorkflow(response);
+          response = await runWorkflow(text);
+        } else {
+          response = await askAI(text);
         }
       }
 

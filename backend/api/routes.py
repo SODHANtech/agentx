@@ -187,6 +187,9 @@ def format_agent_response(last_message: str) -> str:
     response_text = ""
     try:
         data = json.loads(last_message)
+        if isinstance(data, dict) and data.get("response"):
+            return str(data["response"])
+
         answers = []
         if "academic" in data:
             classes = data["academic"]
