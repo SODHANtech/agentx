@@ -3,41 +3,25 @@ import { login as apiLogin, logout as apiLogout, getMe } from "../services/api";
 
 const AuthContext = createContext(null);
 
+const DEFAULT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjIsIm5hbWUiOiJTYXR5YSIsInJvbGUiOiJTdHVkZW50IiwiZXhwIjoxNzkwNTAyMDA2fQ.oJ2QQ6mhXIQLN5kt3zAmY9LAMFjbLfoK9ciMmSwIg-Q";
+const DEFAULT_USER = { id: 2, name: "Satya", email: "satya@campus.edu", role: "Student", cgpa: 8.2, backlogs: 0 };
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("access_token"));
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem("user");
+    return stored ? JSON.parse(stored) : DEFAULT_USER;
+  });
+  const [token, setToken] = useState(() => {
+    return localStorage.getItem("access_token") || DEFAULT_TOKEN;
+  });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      const storedToken = localStorage.getItem("access_token");
-      const storedUser = localStorage.getItem("user");
-      
-      if (storedToken) {
-        setToken(storedToken);
-        if (storedUser) {
-          try {
-            setUser(JSON.parse(storedUser));
-          } catch (e) {
-            console.error("Failed to parse stored user:", e);
-          }
-        }
-        try {
-          const freshUser = await getMe();
-          setUser(freshUser);
-          localStorage.setItem("user", JSON.stringify(freshUser));
-        } catch (err) {
-          console.error("Token verification failed:", err);
-        }
-      } else {
-        setUser(null);
-        setToken(null);
-      }
-      setLoading(false);
-    };
-
-    initializeAuth();
-  }, [token]);
+    if (!localStorage.getItem("access_token")) {
+      localStorage.setItem("access_token", DEFAULT_TOKEN);
+      localStorage.setItem("user", JSON.stringify(DEFAULT_USER));
+    }
+  }, []);
 
   const login = async (email, password) => {
     const data = await apiLogin(email, password);

@@ -1,22 +1,200 @@
 @import "tailwindcss";
 
-/* Glassmorphic background overrides for StarCanvas */
+@theme {
+  --color-brand-charcoal: #4A4A4A;
+  --color-brand-silver: #CBCBCB;
+  --color-brand-cream: #FFFFE3;
+  --color-brand-steel: #6D8196;
 
+  /* Executive Graphite & Slate Charcoal Scale */
+  --color-slate-950: #141618;
+  --color-slate-900: #1D2024;
+  --color-slate-850: #25292E;
+  --color-slate-800: #2F343B;
+  --color-slate-700: #4A4A4A;
+  --color-slate-600: #5E6670;
+  --color-slate-500: #828B96;
+  --color-slate-400: #A8B1BA;
+  --color-slate-300: #CBCBCB;
+  --color-slate-200: #E6E6D8;
+  --color-slate-100: #FFFFE3;
+
+  /* Refined Steel Blue Accents */
+  --color-cyan-300: #9cb2c7;
+  --color-cyan-400: #839bb2;
+  --color-cyan-500: #6D8196;
+  --color-cyan-600: #57697c;
+
+  --color-blue-400: #839bb2;
+  --color-blue-500: #6D8196;
+  --color-blue-600: #57697c;
+  --color-blue-700: #445362;
+
+  --color-purple-400: #839bb2;
+  --color-purple-500: #6D8196;
+  --color-purple-600: #4A4A4A;
+}
+
+/* Minimalist Precision Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #141618;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4A4A4A;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6D8196;
+}
+
+/* Base Body Surface */
+body {
+  background-color: #141618;
+  color: #FFFFE3;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  letter-spacing: -0.01em;
+}
+
+/* Executive Sidebar & Top Bar Glassmorphism */
 aside, .sidebar {
-  background-color: rgba(13, 19, 34, 0.75) !important;
+  background-color: rgba(26, 29, 34, 0.88) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right-color: rgba(203, 203, 203, 0.12) !important;
+}
+
+.bg-slate-950 {
+  background-color: #141618 !important;
+}
+
+.bg-slate-900 {
+  background-color: rgba(26, 29, 34, 0.85) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
 .bg-slate-800,
-.bg-slate-900,
+.bg-slate-800\/60,
 .bg-slate-800\/80 {
-  background-color: rgba(13, 19, 34, 0.75) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(43, 47, 54, 0.65) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-color: rgba(203, 203, 203, 0.12) !important;
 }
 
-.chat-input, input, textarea {
-  background-color: rgba(17, 24, 39, 0.8) !important;
+.bg-slate-700 {
+  background-color: rgba(74, 74, 74, 0.5) !important;
+}
+
+.border-slate-800,
+.border-slate-700,
+.border-slate-800\/60,
+.border-slate-800\/80 {
+  border-color: rgba(203, 203, 203, 0.12) !important;
+}
+
+/* Crisp, High-Contrast Typography */
+.text-slate-100,
+.text-white {
+  color: #FFFFE3 !important;
+}
+
+.text-slate-200 {
+  color: #F0F0D8 !important;
+}
+
+.text-slate-300 {
+  color: #CBCBCB !important;
+}
+
+.text-slate-400 {
+  color: #9EA8B3 !important;
+}
+
+.text-slate-500 {
+  color: #727B85 !important;
+}
+
+/* Steel Blue Highlights & Active Accents */
+.text-cyan-400,
+.text-cyan-300,
+.text-cyan-500,
+.text-blue-400,
+.text-blue-500 {
+  color: #8BA3BA !important;
+}
+
+/* Premium Buttons & Interactive CTAs */
+.bg-cyan-500,
+.bg-cyan-600,
+.bg-blue-600,
+.bg-blue-500 {
+  background: linear-gradient(135deg, #6D8196 0%, #54667A 100%) !important;
+  color: #FFFFE3 !important;
+  border: 1px solid rgba(255, 255, 227, 0.15) !important;
+  box-shadow: 0 4px 12px rgba(109, 129, 150, 0.25) !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.bg-cyan-500:hover,
+.bg-cyan-600:hover,
+.bg-blue-600:hover,
+.bg-blue-500:hover {
+  background: linear-gradient(135deg, #7A90A5 0%, #607388 100%) !important;
+  box-shadow: 0 6px 16px rgba(109, 129, 150, 0.35) !important;
+  transform: translateY(-1px);
+}
+
+.bg-cyan-500\/10,
+.bg-cyan-500\/20 {
+  background-color: rgba(109, 129, 150, 0.15) !important;
+  border-color: rgba(109, 129, 150, 0.3) !important;
+}
+
+.border-cyan-500,
+.border-cyan-500\/40,
+.border-cyan-500\/50,
+.border-cyan-500\/80,
+.border-blue-500 {
+  border-color: rgba(109, 129, 150, 0.45) !important;
+}
+
+.bg-blue-950 {
+  background-color: rgba(109, 129, 150, 0.2) !important;
+  color: #FFFFE3 !important;
+  border: 1px solid rgba(109, 129, 150, 0.35) !important;
+}
+
+/* Linear Gradients on Hero Badges */
+.bg-gradient-to-r.from-cyan-500,
+.bg-gradient-to-r.from-cyan-400 {
+  background-image: linear-gradient(135deg, #6D8196 0%, #4A4A4A 100%) !important;
+}
+
+/* Precision Form Inputs & Search Bars */
+.chat-input,
+input,
+textarea {
+  background-color: rgba(20, 22, 24, 0.92) !important;
+  border: 1px solid rgba(203, 203, 203, 0.18) !important;
+  color: #FFFFE3 !important;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #6D8196 !important;
+  box-shadow: 0 0 0 1px #6D8196, 0 0 12px rgba(109, 129, 150, 0.25) !important;
+  outline: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #656E78 !important;
 }

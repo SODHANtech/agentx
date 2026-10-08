@@ -42,9 +42,9 @@ const StarCanvas = () => {
 
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
+        ctx.fillStyle = `rgba(255, 255, 227, ${star.alpha})`;
         ctx.shadowBlur = 4;
-        ctx.shadowColor = '#00b2ff';
+        ctx.shadowColor = '#6D8196';
         ctx.fill();
       });
 
