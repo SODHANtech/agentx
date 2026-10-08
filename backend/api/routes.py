@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import time
+from datetime import datetime
 from typing import Optional, List
 from langchain_core.messages import HumanMessage
 import json
@@ -275,8 +276,15 @@ def ask(
         agent_steps = response_state.get("agent_steps", [])
         response_text = format_agent_response(last_message)
 
+        # Propagate RAG source evidence metadata
+        agent_outputs = response_state.get("agent_outputs", {})
+        sources = []
+        if "knowledge" in agent_outputs and isinstance(agent_outputs["knowledge"], dict):
+            sources = agent_outputs["knowledge"].get("sources", [])
+
         return {
             "response": response_text,
+            "sources": sources,
             "agent_steps": agent_steps,
             "status": "success"
         }
@@ -352,9 +360,15 @@ async def ask_stream(
             final_steps = final_state.get("agent_steps", accumulated_steps)
             response_text = format_agent_response(last_message)
 
+            agent_outputs = final_state.get("agent_outputs", {})
+            sources = []
+            if "knowledge" in agent_outputs and isinstance(agent_outputs["knowledge"], dict):
+                sources = agent_outputs["knowledge"].get("sources", [])
+
             complete_payload = {
                 "type": "complete",
                 "response": response_text,
+                "sources": sources,
                 "agent_steps": final_steps,
                 "status": "success"
             }
@@ -1165,7 +1179,8 @@ def get_student_event_registrations(
                 "title": r.event.title,
                 "category": r.event.category,
                 "venue": r.event.venue,
-                "date": r.event.start_datetime.strftime("%Y-%m-%d") if r.event.start_datetime else ""
+                "date": r.event.start_datetime.strftime("%Y-%m-%d") if r.event.start_datetime else "",
+                "status": r.status
             })
     return results
 

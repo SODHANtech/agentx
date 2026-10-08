@@ -39,3 +39,15 @@ def test_streaming_ask_endpoint(client, student_headers):
         complete_event = next(e for e in events if e["type"] == "complete")
         assert complete_event["status"] == "success"
         assert len(complete_event["agent_steps"]) >= 2
+
+
+def test_ai_rate_limiter_allows_15_and_blocks_16th():
+    from backend.core.rate_limit import ai_limiter
+    assert ai_limiter.requests_limit == 15
+    test_key = "test_rate_limit_unit_key"
+    ai_limiter.history[test_key] = []
+    
+    for i in range(15):
+        assert ai_limiter.is_rate_limited(test_key) is False, f"Blocked prematurely on request {i+1}"
+        
+    assert ai_limiter.is_rate_limited(test_key) is True

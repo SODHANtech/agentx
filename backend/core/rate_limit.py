@@ -25,7 +25,7 @@ class RateLimiter:
 
 # Limiters configuration
 login_limiter = RateLimiter(requests_limit=10, window_seconds=60)
-ai_limiter = RateLimiter(requests_limit=5, window_seconds=60)
+ai_limiter = RateLimiter(requests_limit=15, window_seconds=60)
 request_limiter = RateLimiter(requests_limit=10, window_seconds=60)
 event_limiter = RateLimiter(requests_limit=15, window_seconds=60)
 
@@ -51,7 +51,7 @@ def rate_limit_ai(request: Request):
         key = f"user_{request.state.user.id}"
     
     if ai_limiter.is_rate_limited(key):
-        raise HTTPException(status_code=429, detail="AI query limit exceeded. Limit is 5 requests per minute.")
+        raise HTTPException(status_code=429, detail="AI query limit exceeded. Limit is 15 requests per minute.")
 
 def rate_limit_requests(request: Request):
     if _should_bypass(request):

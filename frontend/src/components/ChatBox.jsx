@@ -64,7 +64,9 @@ function ChatBox({ runWorkflow, initialPrompt }) {
       const botText =
         typeof response === "string"
           ? response
-          : response?.response || response?.message || JSON.stringify(response);
+          : (response?.sources && response.sources.length > 0)
+            ? JSON.stringify(response)
+            : response?.response || response?.message || JSON.stringify(response);
 
       setMessages((prev) => [
         ...prev,

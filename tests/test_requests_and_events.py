@@ -87,3 +87,20 @@ def test_unified_events_and_registrations(client, student_headers, admin_headers
     cancel_res = client.delete(f"/events/{event_id}/register", headers=student_headers)
     assert cancel_res.status_code == 200
     assert cancel_res.json()["status"] == "success"
+
+    # 6. REGRESSION TEST: Student re-registers for the event after cancellation (DEFECT-P2-01)
+    re_reg_res = client.post(f"/events/{event_id}/register", headers=student_headers)
+    assert re_reg_res.status_code == 200, f"Re-registration failed: {re_reg_res.text}"
+    assert re_reg_res.json()["status"] == "success"
+
+    # 7. Verify database state is correctly "Registered"
+    my_regs_after = client.get("/student/event-registrations", headers=student_headers)
+    assert my_regs_after.status_code == 200
+    matching_reg = next((r for r in my_regs_after.json() if r["event_id"] == event_id), None)
+    assert matching_reg is not None
+    assert matching_reg["status"] == "Registered"
+
+    # 8. Prevent duplicate active registration
+    dup_res = client.post(f"/events/{event_id}/register", headers=student_headers)
+    assert dup_res.status_code == 400
+    assert "already registered" in dup_res.json()["detail"].lower()

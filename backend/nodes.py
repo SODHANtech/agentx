@@ -504,7 +504,9 @@ User Query: {query}
 Retrieved Campus Systems Data:
 {json.dumps(outputs, indent=2)}
 
-Please write a natural, coherent, conversational response in markdown answering the user query based on the retrieved data. Use clean formatting and bullet points where helpful. Do NOT output raw JSON."""
+Please write a natural, coherent, conversational response in markdown answering the user query based on the retrieved data.
+If policy or handbook information is provided with sources, include a concise 'Source References' line at the end of the section citing the document name.
+Use clean formatting and bullet points where helpful. Do NOT output raw JSON."""
         res = llm.invoke(prompt)
         if res and res.content and len(res.content.strip()) > 10:
             return res.content.strip()
@@ -540,9 +542,15 @@ Please write a natural, coherent, conversational response in markdown answering 
             sections.append(f"💼 **Placement:** {p['message']}")
 
     if "knowledge" in outputs:
-        ans = outputs["knowledge"].get("answer", "")
+        k_data = outputs["knowledge"]
+        ans = k_data.get("answer", "") if isinstance(k_data, dict) else str(k_data)
+        sources = k_data.get("sources", []) if isinstance(k_data, dict) else []
         if ans:
-            sections.append(f"📖 **Campus Handbook & Guidelines:**\n{ans}")
+            section = f"📖 **Campus Handbook & Guidelines:**\n{ans}"
+            if sources:
+                src_items = [f"`{s['document']}`" + (f" (p. {s['page']})" if s.get('page') else "") for s in sources]
+                section += f"\n\n📁 **Source References:** {', '.join(src_items)}"
+            sections.append(section)
 
     if "events" in outputs:
         evts = outputs["events"]

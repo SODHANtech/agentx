@@ -76,7 +76,7 @@ export const useWorkflow = () => {
                 setAgents([...payload.agent_steps]);
               }
               if (payload.type === "complete") {
-                finalResponse = payload.response;
+                finalResponse = (payload.sources && payload.sources.length > 0) ? payload : payload.response;
               }
             } catch (err) {
               console.warn("SSE chunk parse warning:", err);

@@ -11,6 +11,7 @@ function Message({ sender, text }) {
 
   // If data has a synthesized response, we prioritize that markdown text
   const displayText = data?.response || text;
+  const sources = data?.sources || data?.knowledge?.sources || [];
 
   // Ensure JSON contains at least one of the structured agent response keys only if no synthesized response exists
   const hasStructuredKeys = data && !data.response && (
@@ -183,6 +184,19 @@ function Message({ sender, text }) {
         ) : (
           <div className="text-slate-100 text-sm leading-relaxed space-y-1">
             {formatMarkdown(displayText)}
+            {sources && sources.length > 0 && (
+              <div className="mt-3 pt-2.5 border-t border-slate-700/60 flex flex-wrap gap-1.5 items-center text-xs">
+                <span className="text-slate-400 font-medium">Verified Sources:</span>
+                {sources.map((s, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 bg-slate-900/90 px-2 py-0.5 rounded text-cyan-300 border border-cyan-800/50 font-mono text-[11px]"
+                  >
+                    📄 {s.document}{s.page ? ` (p. ${s.page})` : ""}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
