@@ -147,13 +147,12 @@ def route(query: str) -> dict:
 
     # Try Groq LLM first
     try:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
-            ("user", "{query}")
-        ])
+        from langchain_core.messages import SystemMessage, HumanMessage
         structured_llm = llm.with_structured_output(RoutingResult)
-        chain = prompt | structured_llm
-        result = chain.invoke({"query": query})
+        result = structured_llm.invoke([
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=query)
+        ])
 
         agents = [agent for agent in result.agents if agent in VALID_AGENTS]
         agents = list(dict.fromkeys(agents))

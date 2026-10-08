@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///backend/database/campus.db"
 
     # LLM Settings
-    LLM_MODEL: str = "llama-3.3-70b-versatile"
+    LLM_MODEL: str = "openai/gpt-oss-120b"
 
     # Server CORS allowed origins (accepts list or comma-separated string)
     ALLOWED_ORIGINS: Union[str, List[str]] = "http://localhost:5173,http://127.0.0.1:5173"
