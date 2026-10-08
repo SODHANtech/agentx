@@ -7,6 +7,11 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+
+# Support configurable API URL at build time
+ARG VITE_API_URL=http://localhost:8005
+ENV VITE_API_URL=$VITE_API_URL
+
 RUN npm run build
 
 # Stage 2: Serve with lightweight, secure Nginx web server
