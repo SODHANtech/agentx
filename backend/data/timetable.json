@@ -1,17 +1,229 @@
 [
-    {
-        "day": "Monday",
-        "subject": "Artificial Intelligence",
-        "time": "10:00 AM"
-    },
-    {
-        "day": "Monday",
-        "subject": "DBMS",
-        "time": "2:00 PM"
-    },
-    {
-        "day": "Tuesday",
-        "subject": "Operating Systems",
-        "time": "11:00 AM"
-    }
+  {
+    "day": "Monday",
+    "period": 1,
+    "time": "09:10 AM - 10:00 AM",
+    "subject": "Discrete Mathematics",
+    "code": "22MA201",
+    "room": "CS-301",
+    "faculty": "Dr. S. Rao"
+  },
+  {
+    "day": "Monday",
+    "period": 2,
+    "time": "10:00 AM - 10:50 AM",
+    "subject": "Database Management Systems",
+    "code": "22CS202",
+    "room": "CS-302",
+    "faculty": "Prof. K. Sharma"
+  },
+  {
+    "day": "Monday",
+    "period": 3,
+    "time": "11:00 AM - 11:50 AM",
+    "subject": "Artificial Intelligence",
+    "code": "22CS203",
+    "room": "CS-303",
+    "faculty": "Dr. N. Reddy"
+  },
+  {
+    "day": "Monday",
+    "period": 4,
+    "time": "11:50 AM - 12:40 PM",
+    "subject": "Design & Analysis of Algorithms",
+    "code": "22CS204",
+    "room": "CS-304",
+    "faculty": "Prof. V. Priya"
+  },
+  {
+    "day": "Monday",
+    "period": 5,
+    "time": "01:30 PM - 02:20 PM",
+    "subject": "Database Management Systems Lab",
+    "code": "22CS205",
+    "room": "CS-Lab-1",
+    "faculty": "Prof. K. Sharma"
+  },
+  {
+    "day": "Monday",
+    "period": 6,
+    "time": "02:20 PM - 03:10 PM",
+    "subject": "Database Management Systems Lab (Continued)",
+    "code": "22CS205",
+    "room": "CS-Lab-1",
+    "faculty": "Prof. K. Sharma"
+  },
+  {
+    "day": "Tuesday",
+    "period": 1,
+    "time": "09:10 AM - 10:00 AM",
+    "subject": "Operating Systems",
+    "code": "22CS206",
+    "room": "CS-301",
+    "faculty": "Dr. M. Anand"
+  },
+  {
+    "day": "Tuesday",
+    "period": 2,
+    "time": "10:00 AM - 10:50 AM",
+    "subject": "Formal Languages & Automata Theory",
+    "code": "22CS207",
+    "room": "CS-302",
+    "faculty": "Prof. R. Gupta"
+  },
+  {
+    "day": "Tuesday",
+    "period": 3,
+    "time": "11:00 AM - 11:50 AM",
+    "subject": "Database Management Systems",
+    "code": "22CS202",
+    "room": "CS-303",
+    "faculty": "Prof. K. Sharma"
+  },
+  {
+    "day": "Tuesday",
+    "period": 4,
+    "time": "11:50 AM - 12:40 PM",
+    "subject": "Software Engineering",
+    "code": "22CS208",
+    "room": "CS-304",
+    "faculty": "Dr. A. Varma"
+  },
+  {
+    "day": "Tuesday",
+    "period": 5,
+    "time": "01:30 PM - 02:20 PM",
+    "subject": "Operating Systems Lab",
+    "code": "22CS209",
+    "room": "CS-Lab-2",
+    "faculty": "Dr. M. Anand"
+  },
+  {
+    "day": "Tuesday",
+    "period": 6,
+    "time": "02:20 PM - 03:10 PM",
+    "subject": "Operating Systems Lab (Continued)",
+    "code": "22CS209",
+    "room": "CS-Lab-2",
+    "faculty": "Dr. M. Anand"
+  },
+  {
+    "day": "Wednesday",
+    "period": 1,
+    "time": "09:10 AM - 10:00 AM",
+    "subject": "Design & Analysis of Algorithms",
+    "code": "22CS204",
+    "room": "CS-301",
+    "faculty": "Prof. V. Priya"
+  },
+  {
+    "day": "Wednesday",
+    "period": 2,
+    "time": "10:00 AM - 10:50 AM",
+    "subject": "Computer Networks",
+    "code": "22CS210",
+    "room": "CS-302",
+    "faculty": "Dr. H. Patel"
+  },
+  {
+    "day": "Wednesday",
+    "period": 3,
+    "time": "11:00 AM - 11:50 AM",
+    "subject": "Web Technologies",
+    "code": "22CS211",
+    "room": "CS-303",
+    "faculty": "Prof. T. Sneha"
+  },
+  {
+    "day": "Wednesday",
+    "period": 4,
+    "time": "11:50 AM - 12:40 PM",
+    "subject": "Operating Systems",
+    "code": "22CS206",
+    "room": "CS-304",
+    "faculty": "Dr. M. Anand"
+  },
+  {
+    "day": "Wednesday",
+    "period": 5,
+    "time": "01:30 PM - 02:20 PM",
+    "subject": "Web Technologies & Full Stack Lab",
+    "code": "22CS212",
+    "room": "CS-Lab-3",
+    "faculty": "Prof. T. Sneha"
+  },
+  {
+    "day": "Wednesday",
+    "period": 6,
+    "time": "02:20 PM - 03:10 PM",
+    "subject": "Professional Communication & Ethics",
+    "code": "22HS201",
+    "room": "Seminar Hall",
+    "faculty": "Dr. P. Joshi"
+  },
+  {
+    "day": "Thursday",
+    "period": 1,
+    "time": "09:10 AM - 10:00 AM",
+    "subject": "Computer Networks",
+    "code": "22CS210",
+    "room": "CS-301",
+    "faculty": "Dr. H. Patel"
+  },
+  {
+    "day": "Thursday",
+    "period": 2,
+    "time": "10:00 AM - 10:50 AM",
+    "subject": "Artificial Intelligence & Machine Learning",
+    "code": "22CS213",
+    "room": "CS-302",
+    "faculty": "Dr. K. Narayana"
+  },
+  {
+    "day": "Thursday",
+    "period": 3,
+    "time": "11:00 AM - 11:50 AM",
+    "subject": "Technical Seminar & Library Research",
+    "code": "22CS214",
+    "room": "Central Library",
+    "faculty": "Faculty Mentor"
+  },
+  {
+    "day": "Friday",
+    "period": 1,
+    "time": "09:10 AM - 10:00 AM",
+    "subject": "Open Elective: Cyber Security / Cloud Computing",
+    "code": "22OE201",
+    "room": "Auditorium 2",
+    "faculty": "Guest Specialist"
+  },
+  {
+    "day": "Friday",
+    "period": 2,
+    "time": "10:00 AM - 10:50 AM",
+    "subject": "Department Project Mentorship & Review",
+    "code": "22PR201",
+    "room": "Innovation Hub",
+    "faculty": "Project Committee"
+  },
+  {
+    "day": "Saturday",
+    "period": 1,
+    "time": "09:30 AM - 10:30 AM",
+    "subject": "Technical Club Hack Session & Coding Contest",
+    "code": "CLUB-01",
+    "room": "Innovation Hub",
+    "faculty": "Club Mentors",
+    "note": "Holiday on 2nd and 4th Saturdays; Working on 1st, 3rd, and 5th Saturdays only."
+  },
+  {
+    "day": "Saturday",
+    "period": 2,
+    "time": "10:30 AM - 11:30 AM",
+    "subject": "Co-Curricular & Career Aptitude Training",
+    "code": "TRAIN-01",
+    "room": "CS-301",
+    "faculty": "Placement Cell",
+    "note": "Holiday on 2nd and 4th Saturdays; Working on 1st, 3rd, and 5th Saturdays only."
+  }
 ]

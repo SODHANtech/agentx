@@ -60,3 +60,7 @@ backend/data/uploads/*
 
 # Vector Database
 backend/vector_db/
+
+# Backup copies
+agentx2.o/
+archive/

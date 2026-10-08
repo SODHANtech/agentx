@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: campus_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: campusos
+      POSTGRES_USER: campus_admin
+      POSTGRES_PASSWORD: campus_secure_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: campus_backend
+    restart: always
+    ports:
+      - "8005:8000"
+    environment:
+      - DATABASE_URL=postgresql://campus_admin:campus_secure_password_2026@db:5432/campusos
+      - JWT_SECRET_KEY=production_secure_secret_key_change_me_in_prod
+      - ENV=production
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://127.0.0.1
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8005
+    container_name: campus_frontend
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

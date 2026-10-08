@@ -51,3 +51,53 @@ class ScheduleAppointmentSchema(BaseModel):
     date: str = Field(..., description="Target date of the appointment (YYYY-MM-DD)")
     time_slot: str = Field("10:00 AM", description="Target time slot of the appointment")
     reason: str = Field("Academic Discussion", description="The reason for scheduling the meeting")
+
+# ==========================================
+# Phase 2 Request & Unified Event Schemas
+# ==========================================
+from datetime import datetime
+
+class StudentRequestCreateSchema(BaseModel):
+    type: str = Field(..., description="Type of request, e.g. Bonafide Certificate, Leave Request")
+    details: str = Field(..., description="Description / context details for the request")
+
+class AdminRequestUpdateSchema(BaseModel):
+    status: str = Field(..., description="New status: Pending | Under Review | Approved | Rejected | Completed")
+    note: Optional[str] = Field(None, description="Explanation or rejection reason")
+
+class AdminEventCreateSchema(BaseModel):
+    title: str = Field(..., description="Event title")
+    category: str = Field(..., description="Category, e.g. Event, Hackathon, Seminar, Workshop, Competition")
+    description: str = Field(..., description="Event description")
+    venue: str = Field(..., description="Venue location")
+    start_datetime: datetime = Field(..., description="Start date & time")
+    end_datetime: datetime = Field(..., description="End date & time")
+    registration_link: Optional[str] = Field(None)
+    max_participants: Optional[int] = Field(0)
+    published: Optional[bool] = Field(False)
+    organizer: Optional[str] = Field(None)
+    department: Optional[str] = Field(None)
+    banner_poster: Optional[str] = Field(None)
+    eligibility: Optional[str] = Field(None)
+    team_size: Optional[int] = Field(None)
+    prize_pool: Optional[str] = Field(None)
+    speaker: Optional[str] = Field(None)
+
+class AdminEventUpdateSchema(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    venue: Optional[str] = None
+    start_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
+    registration_link: Optional[str] = None
+    max_participants: Optional[int] = None
+    published: Optional[bool] = None
+    organizer: Optional[str] = None
+    department: Optional[str] = None
+    banner_poster: Optional[str] = None
+    eligibility: Optional[str] = None
+    team_size: Optional[int] = None
+    prize_pool: Optional[str] = None
+    speaker: Optional[str] = None
+

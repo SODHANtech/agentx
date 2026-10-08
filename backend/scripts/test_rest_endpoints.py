@@ -2,6 +2,7 @@ import os
 import sys
 import httpx
 import tempfile
+from backend.config import settings
 
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -15,7 +16,10 @@ def run_tests():
         print(f"ERROR: Backend server is not running on {BASE_URL}. Please start the backend server first!")
         sys.exit(1)
         
-    client = httpx.Client(base_url=BASE_URL)
+    client = httpx.Client(
+        base_url=BASE_URL,
+        headers={"X-Bypass-Rate-Limit": settings.JWT_SECRET_KEY}
+    )
     
     # ---------------------------------------------
     # 1. AUTH TESTS
@@ -254,6 +258,122 @@ def run_tests():
     assert "student" in dash_data, "Student object missing in dashboard response"
     assert dash_data["student"]["name"] == "Satya", f"Expected Satya user name, got: {dash_data['student']['name']}"
     print("  [PASS] Dashboard endpoint returns dynamic student profile successfully")
+
+    # ---------------------------------------------
+    # 8. SYSTEM HEALTH TESTS
+    # ---------------------------------------------
+    print("\n8. Running System Health & Stats Tests...")
+    health_res = client.get("/health")
+    assert health_res.status_code == 200, f"Health endpoint failed: {health_res.text}"
+    health_data = health_res.json()
+    assert health_data["backend"] == "online"
+    assert health_data["database"] == "connected"
+    assert "uptime" in health_data
+    assert "totalUsers" in health_data
+    assert "students" in health_data
+    assert "admins" in health_data
+    print("  [PASS] Health endpoint checks completed successfully")
+
+    # ---------------------------------------------
+    # 9. PHASE 2 STUDENT REQUEST TESTS
+    # ---------------------------------------------
+    print("\n9. Running Phase 2 Student Request Tests...")
+    # Create request
+    req_res = client.post("/student/requests", json={"type": "Bonafide Certificate", "details": "Scholarship document"}, headers=student_headers)
+    assert req_res.status_code == 200, f"Request creation failed: {req_res.text}"
+    req_data = req_res.json()
+    assert req_data["type"] == "Bonafide Certificate"
+    assert req_data["status"] == "Pending"
+    req_id = req_data["id"]
+
+    # Student requests list
+    stud_reqs_res = client.get("/student/requests", headers=student_headers)
+    assert stud_reqs_res.status_code == 200
+    assert any(r["id"] == req_id for r in stud_reqs_res.json())
+
+    # Get history
+    hist_res = client.get(f"/student/requests/{req_id}/history", headers=student_headers)
+    assert hist_res.status_code == 200
+    assert len(hist_res.json()) >= 1
+    assert hist_res.json()[0]["new_status"] == "Pending"
+
+    # Admin requests list
+    admin_reqs_res = client.get("/admin/requests", headers=admin_headers)
+    assert admin_reqs_res.status_code == 200
+    assert any(r["id"] == req_id for r in admin_reqs_res.json())
+
+    # Admin updates status
+    update_res = client.put(f"/admin/requests/{req_id}", json={"status": "Approved", "note": "All documents verified"}, headers=admin_headers)
+    assert update_res.status_code == 200
+    
+    # Check request status changed
+    admin_req_res = client.get(f"/admin/requests/{req_id}", headers=admin_headers)
+    assert admin_req_res.status_code == 200
+    assert admin_req_res.json()["status"] == "Approved"
+    assert len(admin_req_res.json()["history"]) == 2
+    assert admin_req_res.json()["history"][1]["new_status"] == "Approved"
+
+    # Student notifications check
+    notif_res = client.get("/notifications", headers=student_headers)
+    assert notif_res.status_code == 200
+    my_notifs = notif_res.json()
+    assert any(n["related_type"] == "Request" and n["related_id"] == req_id for n in my_notifs)
+    print("  [PASS] Request pipeline, history tracking, notifications and audit logs verified successfully")
+
+    # ---------------------------------------------
+    # 10. PHASE 2 UNIFIED EVENTS TESTS
+    # ---------------------------------------------
+    print("\n10. Running Phase 2 Unified Events Tests...")
+    # Admin create event
+    import time
+    evt_title = f"Agentic AI Hackathon {int(time.time())}"
+    evt_payload = {
+        "title": evt_title,
+        "category": "Hackathon",
+        "description": "Build agentic apps",
+        "venue": "Lab 3",
+        "start_datetime": "2026-09-01T09:00:00",
+        "end_datetime": "2026-09-02T17:00:00",
+        "published": False,
+        "team_size": 4,
+        "prize_pool": "$5000"
+    }
+    create_evt_res = client.post("/admin/events", json=evt_payload, headers=admin_headers)
+    assert create_evt_res.status_code == 200, f"Event creation failed: {create_evt_res.text}"
+    evt_id = create_evt_res.json()["id"]
+
+    # Student cannot see draft
+    stu_evts_res = client.get("/events?category=hackathon")
+    assert stu_evts_res.status_code == 200
+    assert not any(e["id"] == evt_id for e in stu_evts_res.json())
+
+    # Admin publishes draft
+    publish_res = client.put(f"/admin/events/{evt_id}", json={"published": True}, headers=admin_headers)
+    assert publish_res.status_code == 200
+    assert publish_res.json()["published"] == True
+
+    # Student can now see published
+    stu_evts_res2 = client.get("/events?category=hackathon")
+    assert any(e["id"] == evt_id for e in stu_evts_res2.json())
+
+    # Student registers for event
+    reg_evt_res = client.post(f"/events/{evt_id}/register", headers=student_headers)
+    assert reg_evt_res.status_code == 200
+    
+    # Check duplicate prevention
+    dup_reg_res = client.post(f"/events/{evt_id}/register", headers=student_headers)
+    assert dup_reg_res.status_code == 400
+
+    # Student registration list check
+    my_regs_res = client.get("/student/event-registrations", headers=student_headers)
+    assert any(r["event_id"] == evt_id for r in my_regs_res.json())
+
+    # Audit logs verification
+    audit_res = client.get("/admin/audit-logs", headers=admin_headers)
+    assert audit_res.status_code == 200
+    logs_data = audit_res.json()["logs"]
+    assert any("Created Event" in l["action"] for l in logs_data)
+    print("  [PASS] Unified event CRUD, filters, registrations and security rules verified successfully")
 
     print("\n=== ALL COMPONENT TESTS COMPLETED SUCCESSFULLY ===")
 

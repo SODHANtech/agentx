@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -8,6 +8,7 @@ function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -15,9 +16,13 @@ function Login() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      // Success! Redirect to Dashboard
-      navigate("/");
+      const data = await login(email, password);
+      const role = data?.user?.role || "";
+      if (role.toLowerCase() === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/student");
+      }
     } catch (err) {
       setError(
         err.response?.data?.detail || 

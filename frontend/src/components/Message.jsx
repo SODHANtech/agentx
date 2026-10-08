@@ -9,8 +9,12 @@ function Message({ sender, text }) {
     data = null;
   }
 
-  // Ensure JSON contains at least one of the structured agent response keys
-  const hasStructuredKeys = data && (
+  // If data has a synthesized response, we prioritize that markdown text
+  const displayText = data?.response || text;
+  const sources = data?.sources || data?.knowledge?.sources || [];
+
+  // Ensure JSON contains at least one of the structured agent response keys only if no synthesized response exists
+  const hasStructuredKeys = data && !data.response && (
     data.academic ||
     data.academic_quiz ||
     data.placement ||
@@ -178,11 +182,89 @@ function Message({ sender, text }) {
 
           </div>
         ) : (
-          <p>{text}</p>
+          <div className="text-slate-100 text-sm leading-relaxed space-y-1">
+            {formatMarkdown(displayText)}
+            {sources && sources.length > 0 && (
+              <div className="mt-3 pt-2.5 border-t border-slate-700/60 flex flex-wrap gap-1.5 items-center text-xs">
+                <span className="text-slate-400 font-medium">Verified Sources:</span>
+                {sources.map((s, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 bg-slate-900/90 px-2 py-0.5 rounded text-cyan-300 border border-cyan-800/50 font-mono text-[11px]"
+                  >
+                    📄 {s.document}{s.page ? ` (p. ${s.page})` : ""}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
   );
+}
+
+function parseInline(text) {
+  if (typeof text !== "string") return text;
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} className="font-semibold text-white">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+function formatMarkdown(content) {
+  if (typeof content !== "string") return String(content || "");
+  const lines = content.split("\n");
+  return lines.map((line, idx) => {
+    if (line.startsWith("### ")) {
+      return (
+        <h4 key={idx} className="font-bold text-cyan-300 mt-2 mb-1">
+          {parseInline(line.slice(4))}
+        </h4>
+      );
+    }
+    if (line.startsWith("## ")) {
+      return (
+        <h3 key={idx} className="font-bold text-base text-white mt-3 mb-1">
+          {parseInline(line.slice(3))}
+        </h3>
+      );
+    }
+    if (line.startsWith("# ")) {
+      return (
+        <h2 key={idx} className="font-extrabold text-lg text-white mt-3 mb-2">
+          {parseInline(line.slice(2))}
+        </h2>
+      );
+    }
+    if (
+      line.trim().startsWith("- ") ||
+      line.trim().startsWith("• ") ||
+      line.trim().startsWith("* ")
+    ) {
+      return (
+        <div key={idx} className="flex items-start gap-2 ml-2 my-0.5">
+          <span className="text-cyan-400 mt-1">•</span>
+          <span>{parseInline(line.trim().replace(/^[-•*]\s+/, ""))}</span>
+        </div>
+      );
+    }
+    if (line.trim() === "") {
+      return <div key={idx} className="h-1.5" />;
+    }
+    return (
+      <p key={idx} className="leading-relaxed">
+        {parseInline(line)}
+      </p>
+    );
+  });
 }
 
 export default Message;

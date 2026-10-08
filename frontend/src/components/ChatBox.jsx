@@ -52,12 +52,11 @@ function ChatBox({ runWorkflow, initialPrompt }) {
       if (file) {
         response = await analyzeResume(file);
       } else {
-        // Call backend API
-        response = await askAI(text);
-
-        // Update active agent timeline in right sidebar
+        // Call backend API with real-time SSE streaming or fallback
         if (runWorkflow) {
-          await runWorkflow(response);
+          response = await runWorkflow(text);
+        } else {
+          response = await askAI(text);
         }
       }
 
@@ -65,7 +64,9 @@ function ChatBox({ runWorkflow, initialPrompt }) {
       const botText =
         typeof response === "string"
           ? response
-          : response?.response || response?.message || JSON.stringify(response);
+          : (response?.sources && response.sources.length > 0)
+            ? JSON.stringify(response)
+            : response?.response || response?.message || JSON.stringify(response);
 
       setMessages((prev) => [
         ...prev,
