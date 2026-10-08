@@ -16,7 +16,16 @@ def add_agent_steps(left: List[AgentStep], right: Optional[List[AgentStep]]) -> 
     merged = {step["id"]: step for step in (left + right)}
     return list(merged.values())
 
-class AgentState(TypedDict):
+def merge_dict(left: Optional[dict], right: Optional[dict]) -> dict:
+    res = dict(left or {})
+    if right:
+        res.update(right)
+    return res
+
+class AgentState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     agent_steps: Annotated[List[AgentStep], add_agent_steps]
     student_id: Optional[int]
+    pending_agents: List[str]
+    params: dict
+    agent_outputs: Annotated[dict, merge_dict]

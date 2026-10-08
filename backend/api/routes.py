@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Response, Depends, Header, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import time
@@ -182,6 +183,66 @@ def home():
     }
 
 
+def format_agent_response(last_message: str) -> str:
+    response_text = ""
+    try:
+        data = json.loads(last_message)
+        answers = []
+        if "academic" in data:
+            classes = data["academic"]
+            if isinstance(classes, list):
+                class_details = "; ".join([f"{c['subject']} in {c['classroom']} ({c['time']})" for c in classes])
+                answers.append(f"Timetable Classes: {class_details}")
+            else:
+                answers.append(classes.get("message", "No classes found."))
+        if "academic_quiz" in data:
+            quiz_data = data["academic_quiz"]
+            q_text = quiz_data.get("explanation", "")
+            questions = quiz_data.get("quiz", [])
+            if questions:
+                q_text += "\n\nPractice Quiz:\n"
+                for i, q in enumerate(questions, 1):
+                    options = "\n".join([f"  {j}. {opt}" for j, opt in enumerate(q.get("options", []), 1)])
+                    q_text += f"Q{i}: {q.get('question')}\n{options}\n"
+            answers.append(q_text)
+        if "placement" in data:
+            p_res = data["placement"]
+            answers.append(f"Placement Status: Student is {p_res.get('status', 'not eligible')} for {p_res.get('company', 'selected company')}.")
+        if "knowledge" in data:
+            answers.append(data["knowledge"].get("answer", ""))
+        if "notification" in data:
+            answers.append(data["notification"].get("message", ""))
+        if "events" in data:
+            evts = data["events"]
+            if isinstance(evts, list) and evts:
+                evt_names = ", ".join([e["title"] for e in evts])
+                answers.append(f"Upcoming Events: {evt_names}")
+            else:
+                answers.append("No matching campus events found.")
+        if "student_services" in data:
+            srvs = data["student_services"]
+            if isinstance(srvs, list) and srvs:
+                srv_names = ", ".join([s["service"] for s in srvs])
+                answers.append(f"Matching Services: {srv_names}")
+            else:
+                answers.append(srvs.get("message", "No student services found."))
+
+        response_text = "\n".join(answers)
+
+        if not response_text:
+            if "response" in data:
+                response_text = data["response"]
+            else:
+                response_text = str(last_message)
+
+        if response_text == "{}":
+            response_text = "I received your query. However, no specialized campus agents matched the request. How else can I assist you today?"
+    except Exception:
+        response_text = str(last_message)
+
+    return response_text
+
+
 @router.get("/ask", dependencies=[Depends(rate_limit_ai)])
 def ask(
     query: str, 
@@ -195,7 +256,7 @@ def ask(
             }
         }
 
-        # Invoke the LangGraph workflow with empty trace logs in state input and inject student_id
+        # Invoke the multi-node LangGraph workflow
         response_state = graph.invoke(
             {
                 "messages": [
@@ -209,65 +270,7 @@ def ask(
 
         last_message = response_state["messages"][-1].content
         agent_steps = response_state.get("agent_steps", [])
-
-        # Format output message string based on structured sub-agent payloads
-        response_text = ""
-        try:
-            data = json.loads(last_message)
-            
-            # Map specific agent outputs to readable text responses
-            answers = []
-            if "academic" in data:
-                classes = data["academic"]
-                if isinstance(classes, list):
-                    class_details = "; ".join([f"{c['subject']} in {c['classroom']} ({c['time']})" for c in classes])
-                    answers.append(f"Timetable Classes: {class_details}")
-                else:
-                    answers.append(classes.get("message", "No classes found."))
-            if "academic_quiz" in data:
-                quiz_data = data["academic_quiz"]
-                q_text = quiz_data.get("explanation", "")
-                questions = quiz_data.get("quiz", [])
-                if questions:
-                    q_text += "\n\nPractice Quiz:\n"
-                    for i, q in enumerate(questions, 1):
-                        options = "\n".join([f"  {j}. {opt}" for j, opt in enumerate(q.get("options", []), 1)])
-                        q_text += f"Q{i}: {q.get('question')}\n{options}\n"
-                answers.append(q_text)
-            if "placement" in data:
-                p_res = data["placement"]
-                answers.append(f"Placement Status: Student is {p_res.get('status', 'not eligible')} for {p_res.get('company', 'selected company')}.")
-            if "knowledge" in data:
-                answers.append(data["knowledge"].get("answer", ""))
-            if "notification" in data:
-                answers.append(data["notification"].get("message", ""))
-            if "events" in data:
-                evts = data["events"]
-                if isinstance(evts, list) and evts:
-                    evt_names = ", ".join([e["title"] for e in evts])
-                    answers.append(f"Upcoming Events: {evt_names}")
-                else:
-                    answers.append("No matching campus events found.")
-            if "student_services" in data:
-                srvs = data["student_services"]
-                if isinstance(srvs, list) and srvs:
-                    srv_names = ", ".join([s["service"] for s in srvs])
-                    answers.append(f"Matching Services: {srv_names}")
-                else:
-                    answers.append(srvs.get("message", "No student services found."))
-            
-            response_text = "\n".join(answers)
-            
-            if not response_text:
-                if "response" in data:
-                    response_text = data["response"]
-                else:
-                    response_text = str(last_message)
-            
-            if response_text == "{}":
-                response_text = "I received your query. However, no specialized campus agents matched the request. How else can I assist you today?"
-        except Exception:
-            response_text = str(last_message)
+        response_text = format_agent_response(last_message)
 
         return {
             "response": response_text,
@@ -289,6 +292,89 @@ def ask(
             ],
             "status": "error"
         }
+
+
+@router.get("/ask/stream", dependencies=[Depends(rate_limit_ai)])
+async def ask_stream(
+    query: str,
+    session_id: str = "default",
+    current_user: models.User = Depends(get_current_user)
+):
+    async def sse_generator():
+        config = {"configurable": {"thread_id": session_id}}
+        accumulated_steps = []
+        try:
+            # Yield initial supervisor queued state
+            init_payload = {
+                "type": "start",
+                "node": "supervisor",
+                "agent_steps": [
+                    {
+                        "id": "supervisor",
+                        "name": "Supervisor Agent",
+                        "status": "running",
+                        "detail": "Analyzing user query intent and extracting entities..."
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(init_payload)}\n\n"
+
+            initial_state = {
+                "messages": [HumanMessage(content=query)],
+                "agent_steps": [],
+                "student_id": current_user.id
+            }
+
+            for event in graph.stream(initial_state, config=config):
+                for node_name, state_chunk in event.items():
+                    steps = state_chunk.get("agent_steps", [])
+                    if steps:
+                        for s in steps:
+                            # Update or append step
+                            existing = next((item for item in accumulated_steps if item["id"] == s["id"]), None)
+                            if existing:
+                                existing.update(s)
+                            else:
+                                accumulated_steps.append(s)
+                    data = {
+                        "type": "step_update",
+                        "node": node_name,
+                        "agent_steps": list(accumulated_steps)
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+
+            # Fetch final compiled state
+            final_state = graph.get_state(config).values
+            last_message = final_state["messages"][-1].content
+            final_steps = final_state.get("agent_steps", accumulated_steps)
+            response_text = format_agent_response(last_message)
+
+            complete_payload = {
+                "type": "complete",
+                "response": response_text,
+                "agent_steps": final_steps,
+                "status": "success"
+            }
+            yield f"data: {json.dumps(complete_payload)}\n\n"
+
+        except Exception as e:
+            err_payload = {
+                "type": "error",
+                "response": f"An error occurred while processing query: {str(e)}",
+                "agent_steps": [
+                    {
+                        "id": "supervisor",
+                        "name": "Supervisor Agent",
+                        "status": "completed",
+                        "detail": f"Processing interrupted: {str(e)}"
+                    }
+                ],
+                "status": "error"
+            }
+            yield f"data: {json.dumps(err_payload)}\n\n"
+
+    return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
 
 
 @router.get("/dashboard")
